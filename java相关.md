@@ -1,0 +1,1069 @@
+# 注解
+## 内置注解：
+Supresswarning，
+deprecated，
+override
+## 元注解
+元注解即为注解的注解
+@Target：表示注解可以用在哪些地方(方法，类，变量.....)
+
+@Retention:表示注解在什么阶段有效(source:源码阶段，class:编译阶段，runtime：运行阶段)，作用范围runtime > class > source
+
+@Document：表示是否将注解生成在javadoc中
+
+@Inherited：表示子类可以继承父类的注解
+## 注解的参数
+注解的参数：参数类型 + 参数名（），如
+```
+@interface MyAnnotation{
+    String name(); //参数类型为String，参数名为name
+    int age() default 0; //参数类型为int，参数名为age,默认值为0
+    int id() default -1; //参数类型为int，参数名为id,默认值为-1,代表不存在
+    String[] like(); //参数类型为String数组，参数名为like
+}
+```
+# 反射
+## 获取Class类实例的几个方式：
+1.若已知具体的类，则通过该类的class属性获取
+```
+Class cla = Person.class;
+```
+2.已经某个类的实例，通过该实例的getClass()方法获取
+```
+Class cla = person.getClass();
+```
+3.已经一个类的全类名以及它的包路径，通过Class类的静态方法forName(String className)获取
+```
+Class cla = Class.forName("com.company.Person");
+```
+4.通过类加载器获取
+5.内置类型的包装类（Integer等）可以直接使用类名.Type
+## 类的加载与初始化
+加载：将class文件字节码内容加载到内存中，并将这些静态数据转换成方法区的运行时数据结构，然后**生成一个代表这个类的java.lang.Class对象**
+
+链接：
+（1）.验证：确保加载的类信息符合JVM规范，没有安全方面问题
+（2）.准备：为类的**静态变量**分配内存，并将其**初始化为默认值**
+（3）.解析：将虚拟机常量池中的符号引用（常量名）转换为直接引用（地址）
+初始化：
+（1）.执行类构造器**clinit**()方法的过程，类构造器**clinit**()方法是由编译期自动收集类中所有类变量的赋值动作和静态代码块中的语句合并产生的。（类构造器是构造类信息的，不是构造该类对象的构造器）
+（2）.当初始化一个类时，如果其父类还未初始化，那么会先触发父类的初始化
+（3）.虚拟机保证了**cinit**方法能在多线程环境下被正确加锁和同步
+
+### 反射动态创建对象
+```
+获得class对象：class对象
+Class cla = Class.forName("com.company.Person");
+//创建对象
+Person person = (Person)cla.newInstance();
+//传入参数获取对应构造器
+Constructor con = cla.getDeclaredConstructor(String.class,int.class);
+//通过构造器创建对象
+Person person = (Person)con.newInstance()
+```
+### 反射调用方法
+```
+//通过反射调用普通方法
+User user3 = (User)cla.newInstance();
+//通过反射获取一个方法
+Method setName = c1a.getDeclaredMethod("setName",String.class);
+//通过反射调用方法
+setName.invoke(user3,"张三");
+```
+### 反射操作属性
+```
+User user4 = (User)cla.newInstance();
+//通过反射获取一个属性
+Field name = cla.getDeclaredField("name");
+//取消属性的访问检查(如果这个属性被设置为私有的)
+name.setAccessible(true);
+name.set(user4,"张三");
+```
+
+## 通过反射操作注解
+先自定义一个注解
+```
+//表名的注解
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Table {
+    String value();
+}
+```
+```
+//属性名的注解
+@Target(ElementType.FIELD)
+@Retention(RetentionPolicy.RUNTIME)
+public @interface Field {
+    String colunmName();
+    String name();
+    int length();
+}
+```
+```
+//定义一张表
+@Tbale("tb_student")
+public class Student{
+    @Field(colunmName="id",length=10,type="int")
+    private int id;
+    @Field(colunmName="name",length=255,type="varchar")
+    private String name;
+    @Field(colunmName="age",length=10,type="int")
+    private int age;
+    .......
+}
+```
+```
+//通过反射获取注解
+Class cla = Class.forName("com.company.Student");
+Annotation[] annotations = cla.getAnnotations();
+for (Annotation annotation : annotations) {
+    System.out.println(annotation);
+}
+//获得注解对应value的值
+Annotation annotation = cla.getAnnotation(Table.class);
+Table table = (Table)annotation;
+String value = table.value();
+System.out.println(value);
+
+//获得类指定的注解
+Field field = cla.getDeclaredField("id");
+Field annotation1 = field.getAnnotation(Field.class);
+System.out.println(annotation1.colunmName());// 打印id
+System.out.println(annotation1.length());// 打印10
+System.out.println(annotation1.type()); // 打印 int
+```
+
+## 设计模式
+### 代理模式
+#### 静态代理
+静态代理是通过在工具类中持有目标类实例，并通过工具类调用相关方法来实现在原有业务流程上添加方法
+```
+原有类
+package com.lijie;
+
+//接口类
+public class UserDao{
+	public void save() {
+		System.out.println("保存数据方法");
+	}
+}
+package com.lijie;
+
+//运行测试类
+public  class Test{
+	public static void main(String[] args) {
+		UserDao userDao = new UserDao();
+		userDao.save();
+	}
+}
+```
+如果想要在save之前开启事务，在save之后关闭事务，在不影响原有业务流程的情况下，启用静态代理
+```
+package com.lijie;
+
+//代理类
+public class UserDaoProxy extends UserDao {
+	private UserDao userDao;
+
+	public UserDaoProxy(UserDao userDao) {
+		this.userDao = userDao;
+	}
+
+	public void save() {
+		System.out.println("开启事物...");
+		userDao.save();
+		System.out.println("关闭事物...");
+	}
+
+}
+
+//添加完静态代理的测试类
+public class Test{
+	public static void main(String[] args) {
+		UserDao userDao = new UserDao();
+		UserDaoProxy userDaoProxy = new UserDaoProxy(userDao);
+		userDaoProxy.save();
+	}
+}
+```
+#### 动态代理
+静态代理的问题在于每个被代理类都需要编写自己的代理类，会显得代码冗余
+因此采用动态代理的方式，使用反射创建代理对象和调用方法
+```
+package com.lijie;
+
+//接口
+public interface UserDao {
+    void save();
+}
+```
+```
+package com.lijie;
+
+//接口实现类
+public class UserDaoImpl implements UserDao {
+	public void save() {
+		System.out.println("保存数据方法");
+	}
+}
+```
+那么动态代理的实现代理类可以用如下方式实现：
+```
+package com.lijie;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+
+// 每次生成动态代理类对象时,实现了InvocationHandler接口的调用处理器对象
+public class InvocationHandlerImpl implements InvocationHandler {
+
+	// 这其实业务实现类对象，用来调用具体的业务方法
+    private Object target;
+
+    // 通过构造函数传入目标对象
+    public InvocationHandlerImpl(Object target) {
+        this.target = target;
+    }
+
+    //动态代理实际运行的代理方法
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        System.out.println("调用开始处理");
+        //下面invoke()方法是以反射的方式来创建对象，第一个参数是要创建的对象，第二个是构成方法的参数，由第二个参数来决定创建对象使用哪个构造方法
+		Object result = method.invoke(target, args);
+        System.out.println("调用结束处理");
+        return result;
+    }
+}
+```
+使用动态代理调用方法：
+```
+package com.lijie;
+
+import java.lang.reflect.Proxy;
+
+public class Test {
+    public static void main(String[] args) {
+        // 被代理对象
+        UserDao userDaoImpl = new UserDaoImpl();
+        InvocationHandlerImpl invocationHandlerImpl = new InvocationHandlerImpl(userDaoImpl);
+
+        //类加载器
+        ClassLoader loader = userDaoImpl.getClass().getClassLoader();
+        Class<?>[] interfaces = userDaoImpl.getClass().getInterfaces();
+
+        // 主要装载器、一组接口及调用处理动态代理实例
+        UserDao newProxyInstance = (UserDao) Proxy.newProxyInstance(loader, interfaces, invocationHandlerImpl);
+        newProxyInstance.save();
+    }
+}
+```
+在此例中，通过InvocationHandlerImpl实现了一个UserDaoImpl的接口处理对象，UserDaoImpl是UserDao的实现类，之后通过Proxy.newProxyInstance生成一个代理实例newProxyInstance，在调用newProxyInstance.save()的时候，实际上会调用 InvocationHandlerImpl 中的 invoke() 方法来处理 save() 方法的调用。实际上是通过反射调用了UserDaoImpl的save方法
+动态代理是面向接口的，必须有接口的实现类
+#### CGLIB动态代理
+CGLIB动态代理原理：
+利用asm开源包，对代理对象类的class文件加载进来，通过修改其字节码生成子类来处理。
+
+CGLIB动态代理和jdk代理一样，使用反射完成代理，不同的是他可以直接代理类（jdk动态代理不行，他必须目标业务类必须实现接口），CGLIB动态代理底层使用字节码技术，CGLIB动态代理不能对 final类进行继承。（CGLIB动态代理需要导入jar包）
+```
+package com.lijie;
+import org.springframework.cglib.proxy.Enhancer;
+import org.springframework.cglib.proxy.MethodInterceptor;
+import org.springframework.cglib.proxy.MethodProxy;
+import java.lang.reflect.Method;
+
+//接口
+public interface UserDao {
+    void save();
+}
+
+
+//接口实现类
+public class UserDaoImpl implements UserDao {
+	public void save() {
+		System.out.println("保存数据方法");
+	}
+}
+
+
+public class CglibProxy implements MethodInterceptor {
+	private Object targetObject;
+	// 这里的目标类型为Object，则可以接受任意一种参数作为被代理类，实现了动态代理
+	public Object getInstance(Object target) {
+		// 设置需要创建子类的类
+		this.targetObject = target;
+		Enhancer enhancer = new Enhancer();
+		enhancer.setSuperclass(target.getClass());
+		enhancer.setCallback(this);
+		return enhancer.create();
+	}
+
+	//代理实际方法
+	public Object intercept(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
+		System.out.println("开启事物");
+		Object result = proxy.invoke(targetObject, args);
+		System.out.println("关闭事物");
+		// 返回代理对象
+		return result;
+	}
+}
+
+public class Test {
+    public static void main(String[] args) {
+        CglibProxy cglibProxy = new CglibProxy();
+        UserDao userDao = (UserDao) cglibProxy.getInstance(new UserDaoImpl());
+        userDao.save();
+    }
+}
+
+```
+# Java并发
+
+## 锁
+### volatile
+volatile关键字可以使得变量对所有的线程都可见，但不具备原子性，不能保证变量操作的原子性。volatile关键字可以通过插入特定的内存屏障的方式来禁止指令重排序，volatile只能用于变量，它可以看作是进程同步的轻量级实现
+
+### 乐观锁
+乐观锁：每次假设最好的情况，线程可以不停的执行，无需加锁也无需等待。具体的实现方法有CAS算法和版本号算法，CAS算法会有一个要更新的值V,预期值E,拟写入的新值N，只有当V==E时才会写入新值，否则放弃更新，因为V != E时说明有其他线程修改过了，因此不应该再执行更新。但是仍然存在ABA问题，并且CAS的自旋操作也会给cpu带来负担
+
+### 悲观锁
+悲观锁：每次都假设最坏的情况，线程在进行操作前必须上锁，具体的实现方法有synchronized和ReentrantLock。在高并发的情况下，激烈的锁竞争会导致大量线程阻塞，线程阻塞会带来大量线程上下文切换，增加系统的性能开销。
+
+### synchronized
+synchronized：被其修饰的方法或代码块同一时间只有一个线程能运行。当其修饰的位置不同，其锁住的对象也不同：
+当其作用在实例方法上：锁住的是对象实例
+当其作用在静态方法上：锁住的是当前类
+当其作用在代码块上：锁住的是对应的对象或者类
+```
+synchronized void method() {
+    //业务代码
+}
+
+synchronized static void method() {
+    //业务代码
+}
+
+synchronized(this) {
+    //业务代码
+}synchronized(object) 表示进入同步代码库前要获得 给定对象的锁。
+synchronized(类.class) 表示进入同步代码前要获得 给定 Class 的锁
+
+```
+synchronized底层：在修饰代码块的时候，synchronized通过monitorenter和monitorexit实现，在进入先执行monitorenter获得锁，执行完毕后通过monitorexit释放锁，如果获取锁失败则会阻塞等待
+在修饰方法的时候，synchronized 修饰的方法并没有 monitorenter 指令和 monitorexit 指令，取得代之的确实是 ACC_SYNCHRONIZED 标识，该标识指明了该方法是一个同步方法，从而进行相应的同步调用
+
+jdk1.6以后，synchronized有四种状态：
+1.无锁：对共享资源不加锁
+
+2.偏向锁，**共享资源第一次被访问时**，JVM会对其做一些设置，比如将资源对象头偏向锁设置为1，线程号改为当前线程，当后续该线程再次访问到共享资源时，会比较其偏向锁和线程号，如果与当前线程相同则可以获得资源
+
+3.轻量级锁，当多个进程对共享资源竞争时，JVM会先尝试用轻量级锁，会先尝试用CAS的方式获取锁，如果能够获取那么此时状态为轻量级锁，**如果CAS失败太多次（自旋），那么会升级为重量级锁**
+
+4.重量级锁，当资源已经被线程占有，此时为偏向锁或者轻量级锁状态，此时再有其他进程来竞争，那么会升级为重量级锁，**重量级锁由操作系统实现，开销比较高**
+### ReentrantLock
+ReentrantLock：与synchronized类似，也是一个可重入且独占的锁，只不过它实现公平锁（先来的进程先获得锁），而synchronized只有非公平锁；它可以实现中断等待锁，使得等待锁的进程可以放弃等待去做其他事情，这个是通过lock.lockInterruptibly来实现；它可以用Condition接口和newCondition()方法来实现选择性通知
+
+### 什么是可重入锁
+所谓可重入锁指的是在一个线程中可以多次获取同一把锁，比如一个线程在执行一个带锁的方法，该方法中又调用了另一个需要相同锁的方法，则该线程可以直接执行调用的方法即可重入 ，而无需重新获得锁。
+
+可重入分布式锁的实现核心思路是线程在获取锁的时候判断是否为自己的锁，如果是的话，就不用再重新获取了。为此，我们可以为每个锁关联一个可重入计数器和一个占有它的线程。当可重入计数器大于 0 时，则锁被占有，需要判断占有该锁的线程和请求获取锁的线程是否为同一个。
+
+## 线程及线程池
+
+### ThreadLocal
+ThreadLocal创建的变量可以让线程绑定自己的值
+
+ThreadLocal原理：
+```
+ThreadLocal类的源码
+public class Thread implements Runnable {
+    //......
+    //与此线程有关的ThreadLocal值。由ThreadLocal类维护
+    ThreadLocal.ThreadLocalMap threadLocals = null;
+
+    //与此线程有关的InheritableThreadLocal值。由InheritableThreadLocal类维护
+    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
+    //......
+}
+```
+可以看到Thread有一个内部类ThreadLocalMap，它可以认为是Thread的定制map，而ThreadLocal的set方法为：
+```
+public void set(T value) {
+    //获取当前请求的线程
+    Thread t = Thread.currentThread();
+    //取出 Thread 类内部的 threadLocals 变量(哈希表结构)
+    ThreadLocalMap map = getMap(t);
+    if (map != null)
+        // 将需要存储的值放入到这个哈希表中
+        map.set(this, value);
+    else
+        createMap(t, value);
+}
+ThreadLocalMap getMap(Thread t) {
+    return t.threadLocals;
+}
+```
+可以看到，set方法其实是获取了当前线程的ThreadLocalMap，之后把ThreadLocal对象当作键，其值为map值存入ThreadLocalMap
+
+ThradLocalMap的key为ThreadLocal的弱引用，而值为强引用，因此当ThreadLocal没有被外部强引用的情况下，在被垃圾回收时会导致键为空，值不为空，永远无法回收值的内存空间，造成的内存泄露。ThreadLocalMap在调用get，set，remove时，会清理key为null的记录，但最好每次使用完ThreadLocal后都手动remove。
+### 线程池
+线程池：就是管理一系列线程的资源池，当需要使用线程时从池子里取，使用完之后返还，提高了线程的利用率，降低了重复创建和销毁线程带来的开销
+
+创建线程池的方法：最好通过ThreadPoolExecutor创建，因为其构造函数能更准确说明线程池的运行规则。线程池的三个最重要的参数为corePoolSize，maximumPoolSize，workQueue三个参数是线程池最重要的三个参数，分别指示了线程池的核心线程数，线程池最大可创建的线程数，以及阻塞序列
+任务在请求线程是时，如果核心线程池未满，则创建一个核心线程，如果核心线程池已满，但未达到最大线程数，则创建一个线程，如果都满了而阻塞队列没满，那么加入阻塞队列中，如果阻塞队列也满了，那么会按照饱和策略执行，通常有以下几种饱和策略：
+```
+ThreadPoolExecutor.AbortPolicy： 抛出RejectedExecutionException来拒绝新任务的处理。
+ThreadPoolExecutor.CallerRunsPolicy： 调用执行自己的线程运行任务，也就是直接在调用execute方法的线程中运行(run)被拒绝的任务，如果执行程序已关闭，则会丢弃该任务。因此这种策略会降低对于新任务提交速度，影响程序的整体性能。如果您的应用程序可以承受此延迟并且你要求任何一个任务请求都要被执行的话，你可以选择这个策略。
+ThreadPoolExecutor.DiscardPolicy： 不处理新任务，直接丢弃掉。
+ThreadPoolExecutor.DiscardOldestPolicy： 此策略将丢弃最早的未处理的任务请求。
+```
+常见的线程池阻塞队列：
+无界队列LinkedBlockingQueue，FixThreadPool和SingleThreadPool会选用，它的任务队列长度永远不会放满
+SynchronousQueue，CachedThreadPool会选用，SynchronousQueue没有容量，它的目的是对于提交的任务，如果有空闲线程则分配，如果没有则创建一个新线程，线程数无限扩展，因此可能因为创建大量线程导致OOM
+延迟阻塞队列DalayWorkQueue，ScheduledThreadPool 和 SingleThreadScheduledExecutor会使用，它会按照指定延迟的大小而非放入时间对任务进行排序，采用”堆“结构，会将剩余延迟最小的任务出队，当队列满时，会扩容原来的队列长度1/2大小。
+LinkedBlockingQueue和DalayWorkQueue可能会因为请求过多而OOM
+
+Future类是异步思想的应用。当一个任务太耗时时，可以启动一个子线程去完成，等事情干完之后再通过Future 类获取到耗时任务的执行结果。
+### AQS
+AQS是什么：AQS 核心思想是，如果被请求的共享资源空闲，则将当前请求资源的线程设置为有效的工作线程，并且将共享资源设置为锁定状态。如果被请求的共享资源被占用，那么就需要一套线程阻塞等待以及被唤醒时锁分配的机制，这个机制 AQS 是用 CLH 队列锁 实现的，即将暂时获取不到锁的线程加入到队列中。
+![](./static/AQS.png)
+AQS是通过int变量成员State表示状态的，它被volatile修饰，对所有线程可见
+对于独占锁，以ReentrantLock为例，state为0表示资源未被占用，当线程lock（）时，会使state+1，其他线程就无法获取而阻塞，当线程执行完毕后，则将state-1，其他线程才有机会得到锁
+再以 CountDownLatch 以例，任务分为 N 个子线程去执行，state 也初始化为 N（注意 N 要与线程个数一致）。这 N 个子线程是并行执行的，每个子线程执行完后countDown() 一次，state 会 CAS(Compare and Swap) 减 1。等到所有子线程都执行完后(即 state=0 )，会 unpark() 主调用线程，然后主调用线程就会从 await() 函数返回，继续后余动作。
+因此，state的具体含义还需要根据情况而定
+CountDownLatch伪代码如下：
+```
+public class CountDownLatchExample1 {
+    // 处理文件的数量
+    private static final int threadCount = 6;
+
+    public static void main(String[] args) throws InterruptedException {
+        // 创建一个具有固定线程数量的线程池对象（推荐使用构造方法创建）
+        ExecutorService threadPool = Executors.newFixedThreadPool(10);
+        final CountDownLatch countDownLatch = new CountDownLatch(threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            final int threadnum = i;
+            threadPool.execute(() -> {
+                try {
+                    //处理文件的业务操作
+                    //......
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    //表示一个文件已经被完成
+                    countDownLatch.countDown();
+                }
+
+            });
+        }
+        countDownLatch.await();//这里会一直等，直到state到0
+        threadPool.shutdown();
+        System.out.println("finish");
+    }
+}
+
+```
+对于资源的同步，synchronized 和 ReentrantLock 都是一次只允许一个线程访问某个资源，而Semaphore(信号量)可以用来控制同时访问特定资源的线程数量，它也分为公平和不公平两种模式
+
+CyclicBarrier 和 CountDownLatch 非常类似，它也可以实现线程间的技术等待，但是它的功能比 CountDownLatch 更加复杂和强大。主要应用场景和 CountDownLatch 类似。但CountDownLatch 的实现是基于 AQS 的，而 CycliBarrier 是基于 ReentrantLock(ReentrantLock 也属于 AQS 同步器)和 Condition 的。
+
+CyclicBarrier 内部通过一个 count 变量作为计数器，count 的初始值为 parties 属性的初始化值，每当一个线程到了栅栏这里了，那么就将计数器减 1。如果 count 值为 0 了，表示这是这一代最后一个线程到达栅栏，就尝试执行我们构造方法中输入的任务。
+
+CyclicBarrier 默认的构造方法是 CyclicBarrier(int parties)，其参数表示屏障拦截的线程数量，每个线程调用 await() 方法告诉 CyclicBarrier 我已经到达了屏障，然后当前线程被阻塞。
+```
+public CyclicBarrier(int parties) {
+    this(parties, null);
+}
+
+public CyclicBarrier(int parties, Runnable barrierAction) {
+    if (parties <= 0) throw new IllegalArgumentException();
+    this.parties = parties;
+    this.count = parties;
+    this.barrierCommand = barrierAction;
+}
+```
+### 让线程有返回值的方法
+使用callable代替runnable，callable的call方法有返回值且可以被异常捕获
+### 让线程顺序执行的方法
+1.join
+2.单线程的线程池（FIFO）
+3.wait/notify
+4.可重入锁
+5.通过CountDownLatch(减数器)/ CyclicBarrier(栅栏)
+```
+@Slf4j
+public class Test {
+ 
+    /**
+     * CountDownLatch(减数器)实现/ CyclicBarrier(栅栏)实现
+     * {@link CountDownLatch}
+     * {@link CyclicBarrier}
+     */
+    public static void main(String[] args) {
+        // 3个线程需要2两个信号通知,A->B需要一个,B->C需要一个
+        CountDownLatch signalAB = new CountDownLatch(1);
+        CountDownLatch signalBC = new CountDownLatch(1);
+ 
+        A a = new A(signalAB);
+        B b = new B(signalAB,signalBC);
+        C c = new C(signalBC);
+ 
+        // 线程池中 按顺序执行 A->B->C
+        ExecutorService executorService = Executors.newFixedThreadPool(10);
+        executorService.execute(b);
+        executorService.execute(c);
+        executorService.execute(a);
+ 
+        // 停止接受新任务,当已有任务将执行完,关闭线程池
+        executorService.shutdown();
+        while (!executorService.isTerminated()) {
+            // 等待所有线程执行完成
+        }
+        System.out.println("over");
+        System.exit(0);
+ 
+    }
+ 
+    @AllArgsConstructor
+    static class A implements Runnable {
+        private CountDownLatch latchAB;
+ 
+        @SneakyThrows
+        @Override
+        public void run() {
+            log.info("A");
+            latchAB.countDown();
+        }
+    }
+    @AllArgsConstructor
+    static class B implements Runnable {
+        private CountDownLatch latchAB;
+        private CountDownLatch latchBC;
+ 
+        @SneakyThrows
+        @Override
+        public void run() {
+            latchAB.await();
+            log.info("B");
+            latchBC.countDown();
+        }
+    }
+ 
+    @AllArgsConstructor
+    static class C implements Runnable {
+        private CountDownLatch latchBC;
+ 
+        @SneakyThrows
+        @Override
+        public void run() {
+            latchBC.await();
+            log.info("C");
+        }
+    }
+}
+```
+6.信号量
+7.futuretask
+# JVM
+JVM的三大作用：内存管理，解释执行虚拟机指令，即时编译
+
+JVM的组成：
+1.类加载器：将class文件加载到内存——
+2.运行时数据区域（JVM管理的内存）——
+3.执行引擎（即时编译器，解释器，垃圾回收器等）——
+4.本地接口（调用本地已经编译的方法，比如虚拟机提供的c/c++方法）
+
+字节码文件组成：
+1.基础信息：魔数（CAFEBABE用于区分是否是java文件的文件头），java版本号，访问标识（类还是接口，public final等），以及父类和接口
+2.常量池：字符串常量，类和接口名，字段名
+	常量池中的数据都有一个编号，编号从1开始，在字段或字节码指令中通过编号可以快速找到数据
+	字节码指令中通过编号引用到常量池中的过程叫符号引用
+3.字段：类或接口中声明的字段信息（private int a = 1 中的a）
+4.方法
+	操作数栈：存放临时变量
+	局部变量数组：存放局部变量
+5.属性
+## 类的生命加载周期
+类的生命加载周期：加载——
+连接（验证（验证字节码文件是否满足jvm规范），准备（给静态变量赋初值），解析（将常量池中的符号引用替换成指向内存的直接引用）），final修饰的基本类型静态变量，在准备阶段会直接进行赋值——
+初始化（只会进行一次），1.执行静态代码块中的代码，并为静态变量赋值（其实就是执行了clinit指令），初始化顺序会和代码编写的顺序一致——
+使用——
+卸载
+
+以下几种方式会导致类的初始化：1.访问一个类的静态变量或者静态方法，但当变量是final修饰并且等号右边是常量时不会触发初始化
+2.调用Class.forName（String className）
+3.new一个该类的对象
+4.执行Main方法的当前类
+在有继承的情况下：
+1.访问父类的静态变量，只初始化父类
+2.在执行子类的clinit方法前，会先执行父类的clinit方法
+
+## 类加载器
+类加载器分为虚拟机底层实现（启动类加载器bootstrap）和java实现（扩展类加载器Extension和应用程序类加载器Application）
+bootstrap默认加载java安装目录%JAVA_HOME%/lib下的类文件，比如rt.jar等,字符串类,java中最核心的类
+Extension默认加载java安装目录%JAVA_HOME%/lib/ext下的类文件，允许扩展java中比较通用的类
+Application默认加载java安装目录classpath下的类文件，加载应用使用的类
+
+双亲委派机制：解决jvm有多个类加载器，某个类到底由哪个类加载的问题
+双亲委派机制是指从底向顶检查类是否检查过，并从顶向底尝试加载
+AppClassloader的父加载器是ExtensionClassloader，ExtensionClassloader的父加载器是bootstrapClassloader
+双亲委派机制的两个好处：1.避免核心库被错误加载，2.避免类的重复加载
+
+打破双亲委派机制：1.自定义类加载器：重写loadclass方法，把双亲委派机制相关代码去除
+自定义类加载器无法实现从父类加载器向子类加载器的委派，在SPI中无法使用,因为需要bootstrap先提供Driver的加载，再委派相应的实现接口给应用程序类加载器进行相应接口的加载
+
+2.线程上下文加载器：将一个类加载器保存在线程的私有数据中，跟线程进行绑定，在需要的时候取出来使用，这样就可以让高层的类加载器借助子类加载器加载业务类。
+获取和设置线程的上下文加载器的方法：Thread.currentThread().getContextClassLoader(),Thread.currentThread().setContextClassLoader(ClassLoader cl);
+
+3.osgi模块化
+
+## Java内存布局
+线程共享：方法区，堆区
+线程不共享：程序计数器，本地方法栈，Java虚拟机栈
+
+Java虚拟机栈用于保存Java方法调用，在方法执行过程中会依据栈的形式进出栈，每一个方法称为栈帧，栈帧由局部变量表，操作数栈，帧数据组成
+
+局部变量表：在方法执行过程中存放所有的局部变量。栈帧中的局部变量表是一个数组，数组中每一个位置称为一个槽，槽是可以复用的，一旦某个局部变量不生效，当前槽就可以复用。局部变量表中的变量：this(实例的引用)，形参，方法体中的参数组成
+
+操作数栈：存放运算过程中的临时变量
+
+帧数据主要包括：1.动态链接：保存了符号引用转换为对应运行时常量池中的内存地址
+2.方法出口：指栈帧弹出时，存放的下一个栈帧中的下一条指令的位置
+3.存放了代码中异常的处理信息，包含异常捕获的生效范围以及异常发生后跳转到的字节码指令的位置
+
+本地方法栈：本地方法栈用于保存本地方法调用时的栈帧，hotspot中本地方法和Java方法保存在同一个栈中
+
+————————共享——————————————
+堆区：空间最大的一块内存区域，创建出来的对象都存在于堆上，有三个参数used，total，max，分别指示了已使用，总共，最大的堆空间
+
+方法区：包括类的基本信息（元信息），运行时常量池，字符串常量池
+
+在JDK7及以前，方法区是存放在内存空间中的永久代上；JDK8以后，存放在操作系统的直接内存中的元空间中
+
+字节码文件通过编号查表的方式找到常量，这种常量池称为静态常量池；当常量池加载到内存中，可以通过内存地址快速的定位到常量池中的内容，这种常量池称为运行时常量池
+
+字符串常量池：存储在代码中定义的常量字符串内容，比如"123"，使用+连接两个字符串变量，会导致在堆上创建对象，使用+连接两个字符串常量，会导致在编译阶段直接连接，并在字符串常量池中建立对象
+
+JDK7之前，静态变量存放在永久代中，JDK及之后，静态变量存放在堆中的Class对象中
+
+要创建直接内存上的数据，可以使用ByteBuffer
+语法：ByteBuffer bf = ByteBuffer.allocateDirect（size）
+
+## 垃圾回收机制
+1.触发young gc的时机：当Eden区没有足够空间时，会触发一次Young GC
+
+2.触发full gc的时机：
+（1）调用System.gc（）
+（2）在发生young gc之前，jvm会检查老年代中最大可用连续空间是否小于历代晋升到老年代的对象的平均大小，如果大于，**jdk1.6之前**那么说明没有风险，可以直接young gc，否则，会查看是否允许担保风险，如果允许那么会尝试进行young gc，此时会存在一定风险；如果不允许担保风险，那么会触发full gc。**jdk1.6之后**只要老年代中最大可用连续空间小于历代晋升到老年代的对象的平均大小，就会触发full gc
+
+## 如何优化GC
+1.尽量不要创建过大的对象或数组。
+1.通过虚拟机的 -Xmn 参数适当调大新生代的大小，让对象尽量在新生代中被回收掉。
+1.通过 -XX:MaxTenuringThreshold 参数调大对象进入老年代的年龄，让对象尽量在新生代中被回收掉。
+
+## 进入老年代的时机
+1.大对象直接进入老年代
+2.长期存活的对象将进入老年代。对象创建时会出生在eden区，发生young gc后会被转移到survival区，之后没经过一次gc年龄都会+1，当达到指定的年龄后就会进入老年代。
+
+## 垃圾回收器
+# redis
+## redis的数据类型
+String，hash，List，Set，Zset
+其中String的底层实现是SDS，简单动态字符串
+hash的底层实现是hashmap或listpack
+list的底层实现是quicklist
+set的底层实现是hashmap或整数集合
+zset的底层实现是listpack或跳表
+
+## 为什么用跳表而不是平衡树？
+1.跳表更适合范围查询
+2.跳表修改起来更为便捷
+3.跳表的内存占用比平衡树要少，因为平均只需要1/(1-0.25)的指针，0.25是增加层数的概率
+
+listpack比起压缩列表，去掉了prev字段，使得在插入时不需要多米诺骨牌似的更新prev
+quicklist相当于双向链表+压缩列表，压缩列表作为值存储在节点中
+
+
+## 大Key会有什么影响
+1.AOF日志写回硬盘时：如果是采用的always方式，即写操作一致性完就将AOF文件写文硬盘，那么由于此时是主线程在写，所以如果修改大Key，会造成主线程长时间阻塞，但是另外两种EverySec和no不会，因为会开一个另外的子线程
+
+2.AOF重写和RDB：（1）如果有大Key，一是开启子进程需要复制主进程的页表，如果此时页表很大，那么复制页表会耗费很长的时间 (2) 当发生写操作时，会发生写时复制，操作系统会把主线程的物理内存复制给子线程一份，此时复制物理内存也很耗时。ps：RDB发生写时复制时，子线程会依照复制的物理内存写之前的数据库，新写入的是不会写的，因此如果此时redis崩溃，会造成数据丢失
+
+还会有如下影响：
+客户端超时阻塞。由于 Redis 执行命令是单线程处理，然后在操作大 key 时会比较耗时，那么就会阻塞 Redis，从客户端这一视角看，就是很久很久都没有响应。
+
+引发网络阻塞。每次获取大key产生的网络流量较大，如果一个key的大小是1MB，每秒访问量为1000，那么每秒会产生1000MB的流量，这对于普通千兆网卡的服务器来说是灾难性的。
+
+阻塞工作线程。如果使用del删除大key时，会阻塞工作线程，这样就没办法处理后续的命令。
+
+内存分布不均。集群模型在 slot 分片均匀情况下，会出现数据和查询倾斜情况，部分有大 key 的 Redis 节点占用内存多，QPS 也会比较大。
+
+大key的解决方法：在设计阶段就拆分成小key，或者定期检查删除大key，不要用del，因为会阻塞线程，用unlink，因为这样是异步处理的
+
+## 如何保证redis和数据库的数据一致性
+旁路缓存策略：
+写策略：先更新数据库，再删除缓存
+读策略：命中直接返回，未命中先查询数据库，再更新缓存
+
+对于写操作，无论是先更新数据库还是后更新数据库都有可能造成数据不一致的情况，
+针对先更新数据库，再删除缓存造成的不一致，可以通过分布式锁的方式解决，或者给缓存加一个很短的过期时间
+针对先删除缓存，再更新数据库造成的不一致，可以通过延迟双删解决
+
+对于写策略，如果第二步删除缓存操作失败，那么也是造成数据不一致，要解决这个问题可以通过：
+1.重试，通过消息队列，把要删除的数据放入消息队列中，当删除失败时通过消息队列进行重试
+2.通过查询数据库binlog再进行相应操作
+
+## redis为什么这么快
+1.redis的操作基本都在内存中完成，比读硬盘快很多
+2.redis采用的单线程模型可以避免多线程之间的竞争
+3.redis采用I/O多路复用来处理大量的客户端socket请求
+
+redis引入多线程只是使用了多个I/O进程来处理网络请求，是为了提高I/O的并发度，但是在处理数据的时候仍然是用的单线程
+
+## redis的持久化
+redis通过AOF日志和RDB来实现持久化。其中AOF是通过将执行命令追加到AOF日志中，在redis重启之后通过逐步执行AOF中的命令来恢复数据.AOF写回硬盘的操作有三种，1.写操作完成后立刻写回硬盘，2.每隔一秒将缓冲区的数据写回硬盘，3.由操作系统决定什么时候写回硬盘
+AOF文件过大时会触发AOF重写机制，当AOF文件大小超过阈值时，redis会根据当前数据库里的数据重写AOF文件，这样就可以省去以前AOF文件里一些重复的操作，在重写AOF文件时，通常是通过一个子进程实现的，在重写的过程中，主进程仍然可以写入，不过此时除了要写入AOF缓冲区，还要写入AOF重写缓冲区，等子进程重写完毕后，再将AOF重写缓冲区里的内容追加到新的AOF文件，并替换掉新的
+RDB通过快照保存了当前的数据，因此其恢复起来比AOF要快，因为只需要加载数据就可以了。
+
+## 服务高可用
+redis实现服务高可用：
+1.主从复制，指定一个主节点用于写和读，其余的从节点只负责读，减缓了主节点的压力
+2.哨兵，添加一个另外的监督主从节点的哨兵
+3.切片集群，一个切片集群有16384个哈希槽，根据集群数量不同，每个集群分到的哈希槽数目也不同，数据会根据hash key的值通过CRC16算法得出一个16bit的值，再对16384取余分配到对应的redis集群里去
+
+## 过期删除和内存淘汰
+redis过期删除策略：惰性删除，定期删除
+惰性删除：访问到键过期了才执行删除操作
+定期删除：每隔一段时间抽取一部分键检查是否过期，如果过期则删除，当过期的键占被选取键的25%，会重复执行该过程，为了防止删除卡死，会为删除时间设计一个阈值，当删除时间超过这个阈值则退出删除操作
+
+## 持久化时对过期键的处理
+redis持久化时对过期键如何处理：
+RDB:
+1.生成持久化文件文件时：会对key进行检查，过期的key不会被保存到文件中
+2.加载时：对主节点会进行检查，如果为空不会被加载到数据库，对从节点则不会进行检查，因为主从同步的时候会先删除从节点里的所有数据
+
+AOF：
+1.AOF写入阶段：如果键还没有过期，那么会先保留键，等键过期后，会追加删除语句
+2.AOF重写阶段：会对过期的键进行检查，过期的键不会被写入AOF文件中
+
+## LRU算法和LFU算法
+LRU是最近最久未使用算法，由于存在需要占用额外空间，并且会造成缓存污染的情况，因此redis并没有采用
+LFU是最近最少使用算法，添加了一个数据访问频次的字段
+
+## redis的缓存设计
+缓存雪崩：指短时间内大量的缓存过期，造成应用没有命中缓存转而访问数据库给数据库带来极大压力的现象，解决方法可以打乱key的过期时间或设置不过期
+缓存击穿：与缓存雪崩类似，指热点缓存过期，造成数据库压力大的现象，可以通过互斥锁（同一时间只有一个线程可以访问缓存，其他未能获取锁的线程要么等待锁的释放，要么直接返回默认值或空）或者设置热点缓存不过期
+缓存穿透：指短时间内访问大量缓存中也没有，数据库也没有的数据造成数据库压力大的情况，可以通过拦截非法请求，或者返回空与默认值，或者通过布隆过滤器判断有没有数据存在而不需要经过数据库
+
+## 缓存更新策略
+1.旁路缓存
+2.写穿/读穿，相当于线程不与数据库交互，全权由缓存与数据库交互
+3.写回，在更新数据时，先只更新缓存，标为脏数据，之后对数据库的更新会异步进行，适合写特别多的情况
+
+## redis如何实现延迟队列
+通过redis里的有序集合ZSet中的Score属性存储延时时间，并对任务进行排序实现
+
+## 利用redis实现分布式锁
+通过redis的Set命令中的NX参数，NX参数可以实现”只有键不存在时才可以插入“
+如果 key 不存在，则显示插入成功，可以用来表示加锁成功；
+如果 key 存在，则会显示插入失败，可以用来表示加锁失败。
+```
+SET lock_key unique_value NX PX 10000 
+```
+NX即为上面的锁，PX 10000设置过期时间为10s，防止线程持有锁太久，unique_value用来标识不同的线程，确保获得锁和释放锁都是同一个线程在进行
+主要释放锁时需要两步操作：1.判断锁是否是正确的线程持有，2.删除锁，这两个是一个原子操作，因此需要配合Lua脚本实现
+
+## 主从复制
+三种主从沟通方式：
+1.第一次同步，主节点会写一份RDB快照穿给从节点，在写RDB文件，传输RDB文件，子节点加载RDB文件的时候，期间的写命令会被写到replication buffer缓冲区，之后将缓冲区里的文件发给从节点完成第一次同步
+2.命令传播，主节点和从节点会建立TCP长连接，期间的主节点写命令都会复制到从节点
+3.增量复制，在网络断开一段时候恢复后，从节点会使用在一个环形缓冲区repl_backlog_buffer的偏移与主节点计算增量，如果数据还在缓冲区里，那么会将其写入replication buffer缓冲区由主节点发送给从节点，如果数据已经被覆盖，那么会进行全量同步
+
+## 哨兵
+哨兵通过ping的方式试探主从节点是否存活，当其发现主节点已挂的时候，1.会选出新的主节点，选取方式如下：
+排除网络不好的节点——选取优先级最高的节点——选取复制进度最快的节点——选取id最小的节点
+按照这个顺序选取出新的子节点
+2.将所有节点指向新的主节点
+3.通知客户端主节点已更换
+4.将旧主节点指向新的主节点
+
+# spring
+## spring事务
+
+## Spring是如何解决的循环依赖
+Spring通过三级缓存解决了循环依赖，其中一级缓存为单例池（singletonObjects）,二级缓存为早期曝光对象earlySingletonObjects，三级缓存为早期曝光对象工厂（singletonFactories）。当A、B两个类发生循环引用时，在A完成实例化后，就使用实例化后的对象去创建一个对象工厂，并添加到三级缓存中，如果A被AOP代理，那么通过这个工厂获取到的就是A代理后的对象，如果A没有被AOP代理，那么这个工厂获取到的就是A实例化的对象。当A进行属性注入时，会去创建B，同时B又依赖了A，所以创建B的同时又会去调用getBean(a)来获取需要的依赖，此时的getBean(a)会从缓存中获取，第一步，先获取到三级缓存中的工厂；第二步，调用对象工工厂的getObject方法来获取到对应的对象，得到这个对象后将其注入到B中。紧接着B会走完它的生命周期流程，包括初始化、后置处理器等。当B创建完后，会将B再注入到A中，此时A再完成它的整个生命周期。至此，循环依赖结束
+
+## 为什么要使用三级缓存呢？二级缓存能解决循环依赖吗
+如果要使用二级缓存解决循环依赖，意味着所有Bean在实例化后就要完成AOP代理，这样违背了Spring设计的原则，Spring在设计之初就是通过AnnotationAwareAspectJAutoProxyCreator这个后置处理器来在Bean生命周期的最后一步来完成AOP代理，而不是在实例化后就立马进行AOP代理
+
+# mq
+## mq消息丢失问题
+mq消息丢失可能存在三种可能，生产者端丢失，mq丢失，消费者取到了消息但还没处理造成的丢失
+针对生产者端：1.开始raabitMQ的事务机制，在发送数据之前开启事务，如果消息没被mq接收到生产者端会报错，此时可以回滚事务然后重发消息，如果收到了消息就可以提交事务
+2.使用confirm机制，confirm机制和事务最大的不同就是它是异步的。开启confirm机制后，每个消息会有一个独特的id，mq收到消息后会返回一个ack，如果没有收到消息会回调nack接口告知发送失败，这时可以尝试重发；同时，因为每个消息都有唯一的id，因此在一段时间后没有收到ack，生产者端可以自己重发消息
+
+针对mq端：对mq的消息持久化到硬盘上
+
+针对消费者端：使用raabitmq的ack机制，先关掉mq的自动ack，在消息处理完之后在代码里手动ack。这里的ack是由消费者发送到mq的，与生产这段的ack不同。
+## mq重复消费问题
+mq不处理重复消费问题，通常是在业务代码里自行处理。要求实现幂等性，seckill里是通过用户id+商品id的唯一索引实现
+
+# 网络
+## TCP
+### 为什么需要time-wait
+1.防止历史连接中的数据被后面相同的四元组接受造成数据的错乱
+2.确保被连接端可以正确关闭，因为连接端的ACK可能会丢失，此时为了接收到被连接端最后的fin报文，所以需要等待2msl的时间(ACK过去一个msl，fin过来一个msl)
+
+### time-wait过多的危害
+1.文件描述符占用，得不到释放，占用cpu资源，内存资源，线程资源
+2.端口资源被占用，对于客户端来说，相同的源端口和目标端口的连接是有限的，过多的time-wait会使得无法建立相同的源端口和目标端口，但是不同的相同的源端口去连接不同目标端口还是可以连接的
+
+## HTTP
+### http的状态码
+2xx表示成功，
+3xx表示重定向，301 Moved Permanently表示永久重定向，需要用新的url访问， 302 Found表示资源还在，但是暂时需要用另一个url进行访问。301，302都会在响应头里加上location字段，会由浏览器自动进行跳转。304 Not modified不会跳转，表示资源没有更改可以使用缓存
+4xx表示客户端异常，403 Forbidden表示服务器禁止访问，404 Not Found表示服务器上不存在请求的资源
+5xx表示服务端异常，501 Not Implemented表示服务端暂时还未实现该功能，502 Bad Gateway表示服务器工作正常，但是访问服务器出了问题，503 Service Unavailable 表示服务器当前忙
+### http的报文格式
+host:用来指定服务器的域名
+content-length：用来指定报文的长度
+connection:用来指定是否是长连接，如果为keep-alive就是长连接
+content-type：用来表明本次发送的数据的格式
+accept：表示可以接受的数据格式
+content-encoding：表示数据所使用的压缩格式
+
+### TLS握手过程
+1.客户端会发送Client Hello报文（里面包含TLS版本，加密套件，**第一随机数**）
+2.服务器会发送Server Hello报文（包含了TLS版本，加密套件，**第二随即数**），还会发送服务器的证书（如果要求客户端的证书会在这一步请求），然后把自己的**公钥**发给客户端，结束后发送Server Hello done
+3.客户端收到公钥后，会生成一个**预主密钥**，预主密钥**经过公钥加密**以后发送给服务端，服务端收到后用自己的私钥解密，也可以得到预主密钥
+4.客户端使用**第一随机数，第二随机数，预主密钥**生成会话密钥，发送**Change Cipher Spec**告诉服务端开始加密对话，同时将之前的数据都打包做摘要，用会话密钥加密，发送**Encrypted Handshake Message（Finishd）**消息
+5.服务端同样也会发送**Change Cipher Spec**，**Encrypted Handshake Message（Finishd）**消息.
+6.之后，服务端和客户端开始用会话密钥进行对称加密通话
+![](./static/TLS.png)
+
+以上是RSA的过程，如果是ECDHE，那么用于生成会话密钥的**预主密钥**会被替换为ECDHE算法计算出的密钥x。x是这么计算的：
+服务器再server key exchange这一步，会选取椭圆曲线基点G，还会**生成一个随机数作为自己的私钥**，私钥和G一起计算出**服务端的椭圆曲线公钥**，随和G和服务端公钥会发送给客户端，客户端收到后会用G和一个随机数生成自己的**客户端公钥和私钥**，然后再在client key exchange这一步把公钥发送给服务端，自此，服务端，客户端都有了G，自己的私钥和对方的公钥，可以计算出一个公共的数**x**，最后的**会话密钥**就是用**第一随机数+第二随机数+x生成的（没错，第一随机数和第二随机数就是上面的那个，自己的私钥和公钥是额外加进来的）**
+### 数字签名和CA数字证书
+CA对数字证书进行数字签名的过程如下：
+CA收到网站的信息和公钥以后，会对**这些信息和公钥一起**进行哈希运算（目的是为了压缩数据），之后，CA会生成**一对独特的公钥和私钥**，并使用私钥对这一串哈希字符进行加密（**加密后的字符就叫数字签名**），之后CA会把带有数字签名的数字证书发给服务端。服务端把数字证书发给客户端，客户端会**使用CA的公钥对数字签名进行解密**得到一串哈希字符，之后再对数字证书里的内容进行哈希运算得到**另一串哈希字符**，如果前后两串哈希字符相等，说明是可以信任的。（如果数字证书被篡改，由于中间人没有原本生成数字签名的私钥，所以用CA的公钥去解密是匹配不上的，也就是前后得到的哈希字符串会不一致）。为了防止CA的公钥可靠，CA也需要证明自己的身份，需要有根CA的签名，这一过程由CA的上级CA也就是根CA完成，而根CA是自己给自己签名的
+![alt text](image.png)
+### websocket
+websocket协议用于客户端和服务器之间大量互相传输消息，建立websocket连接需要在http里加上upgrade请求升级协议，客户端会发一个websocket-key给服务端，服务端收到后通过一个公开的加密算法对websocket-key进行加密再传输给客户端，客户端收到后用同样的算法对websocket加密，如果二者一致则连接建立成功
+websocket的opcode用来指定这是什么类型的帧，websocket的帧是由帧长度+帧数组组成的，为了知道具体的帧数据大小，一开始会读前7个比特，如果其值在0~125，则说明第一个7bit的payload长度就够用，如果为126，那么还需要往后读16个比特的payload，如果为127，那么需要往后读64个比特的payload（16+32+16）
+# Mysql
+## mysql的扫描类型
+All（全表扫描）；
+index（全索引扫描）；
+range（索引范围扫描）；
+ref（非唯一索引扫描）；
+eq_ref（唯一索引扫描）；
+const（结果只有一条的主键或唯一索引扫描）。
+执行效率依次从低到高
+
+## mysql的优化思路
+前缀索引优化，对记录的几个前缀建立索引，减少索引字段的大小，使一个索引页面能够容纳下更多的索引项
+覆盖索引优化，使查询中的字段在二级索引中都能找得到，避免回表
+主键索引最好自增，避免插入中间的键值引起页面的分裂
+主键不应太大，否则其他的索引也会很大
+优化查询语句，防止索引失效
+索引最好设置为NOT NULL
+大数据量查询时limit优化，最好加上无序查询，这样可以避免数据库排序所耗费的时间
+
+## 索引失效的原因
+1.使用了左模糊查询或者左右模糊查询
+2.对索引使用了函数
+3.对索引使用了表达式运算
+4.索引进行了隐式类型转换 （mysql会把字符串转为其他类型，当索引为字符串时相当于把索引强转为了其他类型，建立的索引就失效了）
+5.联合索引进行了非最左匹配
+6.使用了or或者in
+
+## Myisam和innodb引擎的区别
+1.innodb支持事务，而myisam不支持
+2.innodb支持外键，而myisam不支持
+3.innodb是聚簇索引，其主键索引和数据是放在一起的，二级索引里存放的是主键的值；而myisam是非聚簇索引，不论是主键索引还是二级索引，存放的都是数据文件的指针
+3.innodb必须有唯一索引，而myisam可以没有
+4.innodb不保存表的具体行数，执行select count时需要扫描全表，这是因为innodb支持事务，不同事物看到的表的行数是不一样的；而myisam有一个全局字段保存表的行数
+5.innodb支持行级锁，而myisam仅支持表级锁
+6.innodb不支持全文索引，myisam支持全文索引
+## 数据库的四大特性
+原子性：所有操作必须同时执行成功
+数据一致性：事务操作前和操作后数据库里的数据满足完整性约束，保证一致
+隔离性：多个事务可以并发的对数据库进行操作而不会相互制约
+持久性：事务对数据库的改变是永久的
+
+实现原理：原子性是通过undo log实现的，持久性是通过redo log实现的，隔离性是通过MVCC实现的，数据一致性是通过原子性+持久性+隔离性实现的
+
+## 索引下推
+对索引的判断在存储引擎完成，而不用在服务层完成
+
+## 聚簇索引的特点
+1.唯一性：一个表中只有一个聚簇索引
+2.数据物理顺序：
+3.主键默认：聚簇索引默认是主键，如果没有主键，会定义一个唯一且非空的索引作为聚簇索引，如果没有这样的索引，那么会自动创建一个索引
+4.快速查询：聚簇索引中包含所有所有的数据，因此可以减少一次查询，（不用回表？）
+5.范围查询优化：聚簇索引中，数据按顺序排在数据页上，相同值也排在一起，因此在进行范围查询比如group by 或者 order by的时候可以不用进行大范围查询
+6.覆盖索引扫描
+
+## 慢sql
+当sql和索引都没有问题时的解决思路：
+1.增加缓存，将一些热点数据放到redis里
+2.分表
+3.在读多写少的情况下可以采用主从复制
+4.分库
+
+如何保证redis里都是热点数据：利用redis的LRU算法，选择合适的LRU算法
+allkeys-lru：从所有键中选择最近最少使用的键淘汰
+volatile-lru：从设置了过期时间的所有键中选择最近最少使用的键淘汰
+
+## mysql一张表能存储多少数据
+取决于MySQL的配置和机器的硬件。mysql会把索引装进内存，在innodb buffer size足够的情况下，能放得下全部索引，不会影响速度，但当表的大小达到一个数量级后，内存无法存储索引，因此需要进行磁盘的io，此时会影响性能
+## sql如何分页，limit如何分页
+分页使用limit实现，不同的页数根据关键字offset实现
+
+## mysql的锁机制
+从粒度大小分可以分为全局锁、表级锁和行级锁
+
+而表级锁又可分为表锁、元数据锁、意向锁和AUTO-INC锁
+表锁：可将整个表锁住，限制包括本进程在内的所有进程的读写，粒度较大，影响性能
+元数据锁：自动加上的锁，进行CRUD操作时会加上MDL读锁，进行表结构改变的时候会加上MDL写锁，其中读锁和读锁之间不互斥，读锁写锁互斥并且写锁的优先级在读锁之上，当写锁阻塞时候，后续的读锁也会一起阻塞
+意向锁：在对记录加上独占锁之前，需要先取得意向独占锁；在对记录加上共享锁之前，需要先取得意向共享锁。意向共享锁是用来快速判断表里是否有记录被加锁，如果没有意向锁，在给表加独占表锁时，需要遍历每一条记录，查看记录是否存在独占锁，而有了意向锁，只需要查看表里有无意向锁，这样就可以不用去遍历所有记录。
+AUTO-INC锁：在插入数据时会加一个表级别的AUTO-INC锁，随后为被auto-increment修饰的字段自增1，在持有AUTO-INC锁的时候，其他事务的插入操作会被阻塞，从而保证了auto-increment修饰的字段能够正确递增。AUTO-INC锁是在语句执行完毕之后才释放的（ innodb_autoinc_lock_mode = 0），也可以设置参数 innodb_autoinc_lock_mode = 2来使申请自增后就释放锁，而不必等到语句执行完毕。但是这样存在的风险是可能使同一个会话的插入值主键不连续，从而使得主库从库不一致（从库只会执行完一个会话的插入后再执行另一个，此时是连续的），此时可以设置binlog日志的格式为row，从而使主从库的主键值一致
+
+行级锁分为记录锁，间隙锁，和next-key锁，next-key是前两者的结合，它即锁住了一个区间，也锁住了一个点（左开右闭区间），还有插入意向锁。
+插入意向锁与意向锁类似，如果记录插入位置已经被加了间隙锁，那么它会先阻塞，并在此期间生成一个插入意向锁（只是生成），并将锁设为等待状态，只有当前一个事务提交后，锁才会变为正常状态，值得注意**意向锁只是会提前生成，而不是生成之后就分配给事务。也就是说意向锁与间隙锁是互斥的，不可能一个事务持有间隙锁，一个事务持有意向锁，只有等持有间隙锁的事务提交之后，意向锁才会被分配到相应事务**
+加行级锁的情况：使用锁定读
+```
+//对读取的记录加共享锁(S型锁)
+select ... lock in share mode;
+
+//对读取的记录加独占锁(X型锁)
+select ... for update;
+```
+或者进行update和delete操作时会加上行级锁，加锁的基本单位是next-key锁，但是某些情况可能退化为间隙锁或者记录锁，这个要具体情况具体分析。
+如果是对非唯一索引加锁，那么加锁之后能否插入二级索引值相同的记录，还要看其插入的范围，因为在锁定二级索引的同时也会锁定对应的主键。比如二级索引的间隙锁范围为（22，39），对应的主键值为10，20.那么能否插入二级索引为22，39的值得还需要看其主键的值，如果插入为（3，22）的值，那么可以插入成功，因为它不在间隙锁范围内，同理（12，22）就不能成功插入，因为它在间隙锁范围内
+![](./static/二级索引表.png)
+## mysql的五种数据类型
+整型，浮点数类型，字符串类型，日期类型，二进制类型
+## mysql进行范围查询时的过程
+通过二分查找加载满足第一个叶子节点页到内存，在表中通过二分查找找到一一条满足要求的数据，之后通过页内链表和叶间链表不断查询，直到找到一条不满足要求的数据。
+
+## redolog和binlog是怎么保持数据一致性的
+通过两阶段提交。数据库会开启一个内部事务XA，会先往redolog里写入事务的id XID，之后将redolog刷盘（**prepare阶段，此时redolog的事务状态被设置为prepare**），然后将XID写入binlog，进行binlog的刷盘，完成后，**将redolog的事务状态设置为commit**。
+
+如果发生异常，那么会先顺序扫描redolog文件，当发现处于prepare阶段的redolog时，会去扫描binlog，如果在binlog里发现了XID，那么说明redolog和binlog都已经完成刷盘，可以提交事务；如果没有发现XID，那么说明redolog刷盘了但是binlog没有刷盘，此时需要进行回滚
+
+## 各种刷盘时机比较
+### redolog
+MySQL 正常关闭时；
+
+当 redo log buffer 中记录的写入量大于redo log buffer内存空间的一半时，会触发落盘；
+
+InnoDB 的后台线程每隔 1 秒，将 redo log buffer 持久化到磁盘。
+
+每次事务提交时都将缓存在redo log buffer里的redo log直接持久化到磁盘，这个策略可由 innodb_flush_log_at_trx_commit 参数控制，
+
+当设置该参数为0时，表示每次事务提交时，还是将redo log留在redo log buffer中 ，该模式下在事务提交时不会主动触发写入磁盘的操作。
+当设置该参数为1时，表示每次事务提交时，都将缓存在redo log buffer里的redo log直接持久化到磁盘，这样可以保证MySQL异常重启之后数据不会丢失。
+当设置该参数为2时，表示每次事务提交时，都只是缓存在redo log buffer里的redo log写到redo log文件，注意写入到「redo log 文件」并不意味着写入到了磁盘，因为操作系统的文件系统中有个 Page Cache，Page Cache 是专门用来缓存文件数据的，所以写入「redo log文件」意味着写入到了操作系统的文件缓存。
+### binlog
+MySQL提供一个 sync_binlog 参数来控制数据库的binlog刷到磁盘上的频率：
+
+sync_binlog=0的时候，表示每次提交事务都只write，不fsync，后续交由操作系统决定何时将数据持久化到磁盘；
+sync_binlog=1的时候，表示每次提交事务都会write，然后马上执行fsync；
+sync_binlog =N(N>1)的时候，表示每次提交事务都write，但累积N个事务后才fsync。
+
+### AOF
+在 redis.conf配置文件中的appendfsync配置项可以有以下 3 种参数可填：
+
+Always，这个单词的意思是「总是」，所以它的意思是每次写操作命令执行完后，同步将AOF日志数据写回硬盘；
+
+Everysec，这个单词的意思是「每秒」，所以它的意思是每次写操作命令执行完后，先将命令写入到 AOF 文件的内核缓冲区，然后每隔一秒将缓冲区里的内容写回到硬盘；
+
+No，意味着不由Redis控制写回硬盘的时机，转交给操作系统控制写回的时机，也就是每次写操作命令执行完后，先将命令写入到 AOF 文件的内核缓冲区，再由操作系统决定何时将缓冲区内容写回硬盘。
+
+# 分布式
+## 分布式id生成方法
+1.数据库主键自增
+2.数据库号段分配
+3.uuid算法
+4.雪花算法
+
+
+# Seckill秒杀系统
+## 解决库存超卖问题
+通过将库存的扣减写到SQL里，这样因为update操作是当前读，会加上一个记录锁，所以可以保证在读取库存最新的情况下且库存大于0时才进行扣减
+另外对秒杀订单简历id+商品id的唯一索引，在生成订单前开启事务，如果存在相同索引订单会抛出异常，造成事务的回滚
+
+
+另外的方案：加Redisson分布式锁 或者 查询库存时使用 for update进行加锁
+
+## 减少sql访问
+1.通过redis库存预减减少对mysql的访问
+2.通过内存标记减少对redis的访问
+
+## 解决重复抢购问题
+1.通过读取缓存订单
+2.对数据库订单表中
+
+# Linux
+查看cpu使用率：1.top   2.cat /proc/loadavg
+
+查看内存:free
+
+查看日志:tail,往后看多少日志，例如
+tail  -n  10   test.log   查询日志尾部最后10行的日志;
+tail  -n +10   test.log   查询10行之后的所有日志;
+tail  -fn 10   test.log   循环实时查看最后10行记录(最常用的)
+一般还会配合grep一起用，比如  tail -fn 1000 test.log | grep '关键字'
+如果想要翻页查看，那么使用more：tail -n 4700  aa.log |more -1000 可以进行多屏显示(ctrl + f 或者 空格键可以快捷键)
+
+head，于tail相反，往前看
+head -n  10  test.log   查询日志文件中的头10行日志;
+head -n -10  test.log   查询日志文件除了最后10行的其他所有日志;
+
+less,与more类似，但是比more更加灵活，可以向上向下翻页
+一般的查找流程：
+less log.log
+shift + G 命令到文件尾部  然后输入 ？加上你要搜索的关键字例如 ？1213
+按 n 向上查找关键字
+shift+n  反向查找关键字
+
+
+查找关键字:grep
+
+报告进程：ps(ps -ef|grep xxx)
+
+# OS
+## 零拷贝
+零拷贝指的是减少数据在缓冲区之间的拷贝次数以及系统调用的次数。
+
+传统模式下：发起read调用，DMA拷贝到内核缓冲区，CPU将内核缓冲区内容拷贝到用户空间；发起write调用，CPU将用户空间拷贝到socket缓冲区，DMA将socket缓冲区内容拷贝到网卡。会进行**4次拷贝，2次系统调用，4次上下文切换**
+
+mmap+write：发起read调用，DMA拷贝到内核缓冲区，此时，**应用程序和内核共享这个缓冲区**，之后发起write调用，会将内容从内核缓冲区拷贝到socket缓冲区(CPU)，DMA将socket缓冲区拷贝到网卡，会进行**3次拷贝，2次系统调用，4次上下文切换**
+
+sendfile：发起sendfile调用，DMA拷贝到内核缓冲区，**内核缓冲区会拷贝到socket缓冲区(CPU)**，DMA将socket缓冲区内容拷贝到网卡，会进行**3次拷贝，1系统调用，2次上下文切换**
+
+在支持SG-DMA的条件下的sendfile：发起sendfile调用，DMA拷贝到内核缓冲区，**之后DMA会直接把内核缓冲区内容拷贝到网卡里，而不需要拷贝到socket缓冲区**，会进行**2次拷贝，1次系统调用，2次上下文切换**,并且全程只需要DMA拷贝
+## NIO
+NIO指的是非阻塞IO，与之对应的是阻塞IO BIO。BIO指的是线程在发出IO调用以后会进入阻塞状态，直到IO完成，BIO指的是线程发出IO调用以后线程不会阻塞，而是采用轮询的方式查看IO是否完成，**BIO在内核准备好数据后将其拷入用户空间时还是会阻塞**。还有一种方式是异步IO，指的是线程调用以后就立刻返回，等待IO完成以后再进行数据处理，不会有阻塞
+
+IO多路复用指的是一个线程可以处理多个IO请求。最常见的方式有select，poll和epoll。**其中select和poll都是采用的将所有已连接socket放进一个文件描述符集合，拷贝进内核，让内核通过遍历的方式检查有无IO事件发生并标记**，检查完以后会**重新拷贝回用户态，同样通过遍历的方式找到可读或者可写的socket**。
+epoll在内核中维护了一个**socket红黑树**，每次只需要把待检测的socket复制到内核，而不用把所有socket描述符都复制到内核，并且会有一个**就绪事件链表，每当有事件产生时就会将socket复制到链表中**。当用户调用epoll_wait()时，只会返回就绪的事件个数而不用轮询遍历。epoll的封装主要有Reactor模式
+
+![alt text](image-1.png)
+
+epoll的封装主要有Reactor模式
+![alt text](image-4.png)
+![alt text](image-5.png)
+![alt text](image-6.png)
+
+Java中的NIO通常是指由buffer，channel，selector组成的IO模型。Buffer是缓冲区，它与Channel之间双向连接，当进行读操作时会从Channel写到Buffer，写操作时会从Buffer写到Channnel。
+Channel是建立了与数据源（如文件、网络套接字等）之间的连接，它会注册到Selector，由Selector进行事件监听
+![alt text](image-2.png)
+Selector 是基于事件驱动的 I/O 多路复用模型(**也就是前面说的Reactor**)，主要运作原理是：通过 Selector 注册通道的事件，Selector 会不断地轮询注册在其上的 Channel。当事件发生时，比如：某个 Channel 上面有新的 TCP 连接接入、读和写事件，这个 Channel 就处于就绪状态，会被 Selector 轮询出来。Selector 会将相关的 Channel 加入到就绪集合中。通过 SelectionKey 可以获取就绪 Channel 的集合，然后对这些就绪的 Channel 进行响应的 I/O 操作。
+![alt text](image-3.png)
+## 线程通信的方式
+1.volatile关键字
+2.wait/notify
+3.condition的signal/await
+4.join

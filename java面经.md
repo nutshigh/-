@@ -34,6 +34,19 @@ concurrentHashMap：线程1进行完哈希后，在当前位置没有Node的情�
 在concurrentHashMap中的put操作流程如下：
 ![](./static/concurrentHM_Put.png)
 
+**JDK1.7以前**的concurrentHashMap在对segment进行put时，会先获取当前segment的锁，如果没有获取到，那么会自旋以尝试获取锁，在获取锁的期间还会获取即将put的节点node（已存在的或者是new出来的）。
+获取到锁之后，会计算put的数据要放入的地方index，然后获取HashEntry数组中这个位置的hashentry，如果这个位置的hashentry不存在的话，那么会先检查当前容量，如果插入后超过了当前容量但又小于最大容量的话，那么会先扩容，然后使用头插法直接插入node；如果存在的话，会遍历该hashentry所属链表看是否有相同的元素，如果有那么直接替换，如果没有那么会插入，同样插入前会检查是否需要扩容。
+concurrentHashMap扩容后的元素位置并不是重新散列的，而是要么不变，要么等于旧的容量+旧的位置，这是因为这段代码：
+int oldCapacity = oldTable.length;
+// 新容量，扩大两倍
+int newCapacity = oldCapacity << 1;
+/ 新的掩码，默认2扩容后是4，-1是3，二进制就是11。
+int sizeMask = newCapacity - 1;
+ // 计算新的位置，新的位置只可能是不变或者是老的位置+老的容量。
+int idx = e.hash & sizeMask;
+因为容量扩大了两倍，那么sizeMask也会扩大两倍（比如：00111->01111，严格来说不是两倍）而e.hash是不变的，所以e.hash & sizeMask以后e.hash的位置变为原来的数组长度+原来的位置（比如e.hash原本为10111110，此时长度为16，sizeMask就为1111，此时e.hash & sizeMask = 1110,但是当扩大两倍后，sizeMask变为11111，此时e.hash & sizeMask = 11110，显然等于16+1110，但是当e.hash等于10101110的时候e.hash & sizeMask就会不变了）
+
+
 ### 并发的三大特性
 原子性，可见性，有序性
 
@@ -41,8 +54,6 @@ concurrentHashMap：线程1进行完哈希后，在当前位置没有Node的情�
 ### 为什么是三次握手
 1.如果是两次握手，那么客户端只要发出请求就可以建立连接，那么如果有网络中有历史报文传给了服务端，那么就会导致连接建立，造成了资源的浪费
 2.两次握手是服务端对请求端的序号进行了确认，但是请求端还没有对服务端的序号进行确认，因此需要第三次握手来保证服务端的序号是正确的
-
-
 
 ### OOM排查思路
 1.是否是内存溢出：内存本身太小，加大内存

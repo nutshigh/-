@@ -677,9 +677,26 @@ jdk1.6以后，synchronized有四种状态：
 3.轻量级锁，当多个进程对共享资源竞争时，JVM会先尝试用轻量级锁，会先尝试用CAS的方式获取锁，如果能够获取那么此时状态为轻量级锁，**如果CAS失败太多次（自旋），那么会升级为重量级锁**
 
 4.重量级锁，当资源已经被线程占有，此时为偏向锁或者轻量级锁状态，此时再有其他进程来竞争，那么会升级为重量级锁，**重量级锁由操作系统实现，开销比较高**
+### AQS
+AQS 核心思想是，如果被请求的共享资源空闲，则将当前请求资源的线程设置为有效的工作线程，并且将共享资源设置为锁定状态。如果被请求的共享资源被占用，那么就需要一套线程阻塞等待以及被唤醒时锁分配的机制，这个机制 AQS 是基于 CLH 锁 （Craig, Landin, and Hagersten locks） 实现的。
+CLH 锁是对自旋锁的一种改进，是一个虚拟的双向队列。
+**为什么是虚拟的？虚拟的什么意思**
+
+https://mp.weixin.qq.com/s/jEx-4XhNGOFdCo4Nou5tqg
+CLH 锁是一个链表队列，为什么 Node 节点没有指向前驱或后继指针呢？
+CLH 锁是一种隐式的链表队列，没有显式的维护前驱或后继指针。因为每个等待获取锁的线程只需要轮询前一个节点的状态就够了，而不需要遍历整个队列。在这种情况下，只需要使用一个局部变量保存前驱节点，而不需要显式的维护前驱或后继指针。
+
+基于AQS实现的同步器有：ReentrantLock，Semaphora，CountDownLatch，CyclicBarrier
+
+CountDownLatch的应用场景主要是一个线程需要等待其他线程完成某些步骤才可以继续执行，主要体现在**等待**，这里是**一个等多个**
+CyclicBarrier的应用场景主要是多个线程到达某一阶段后需要等待其他线程也执行到特定步骤后才能继续执行，主要体现在**同步**，这里是**线程互相等待，先到的等后到的**。
+CountDownLatch和CyclicBarrier的state都是依照预先定好的数值，每到一个线程则递减。
+CountDownLatch是通过CountDownLatch.countDown()递减，CyclicBarrier是通过CyclicBarrier.await()递减，等到减为0以后才可以继续往下执行。
+
 ### ReentrantLock
 ReentrantLock：与synchronized类似，也是一个可重入且独占的锁，只不过它实现公平锁（先来的进程先获得锁），而synchronized只有非公平锁；它可以实现中断等待锁，使得等待锁的进程可以放弃等待去做其他事情，这个是通过lock.lockInterruptibly来实现；它可以用Condition接口和newCondition()方法来实现选择性通知
-
+ReentrantLock实现可重入的原理与AQS有关（ReentrantLock本来就是基于AQS的同步器），
+ReentrantLock的内部维护了一个 state 变量，用来表示锁的占用状态。state 的初始值为 0，表示锁处于未锁定状态。当线程 A 调用 lock() 方法时，会尝试通过 tryAcquire() 方法独占该锁，并让 state 的值加 1。如果成功了，那么线程 A 就获取到了锁。如果失败了，那么线程 A 就会被加入到一个等待队列（CLH 队列）中，直到其他线程释放该锁。假设线程 A 获取锁成功了，**释放锁之前，A 线程自己是可以重复获取此锁的（state 会累加）**。这就是可重入性的体现：一个线程可以多次获取同一个锁而不会被阻塞。但是，这也意味着，一个线程必须释放与获取的次数相同的锁，才能让 state 的值回到 0，也就是让锁恢复到未锁定状态。
 ### synchronized 和 volatile区别
 volatile 关键字是线程同步的轻量级实现，所以 volatile性能肯定比synchronized关键字要好 。但是 volatile 关键字只能用于变量而 synchronized 关键字可以修饰方法以及代码块 。
 volatile 关键字能保证数据的可见性，但不能保证数据的原子性。synchronized 关键字两者都能保证。

@@ -208,7 +208,7 @@ public class UserDaoImpl implements UserDao {
 	}
 }
 ```
-那么动态代理的实现代理类可以用如下方式实现：
+代理接口：
 ```
 package com.lijie;
 
@@ -317,6 +317,12 @@ public class Test {
 }
 
 ```
+### springAOP中的动态代理
+JDK 动态代理：**对于实现了接口的目标类**，Spring AOP 默认使用 JDK 的 java.lang.reflect.Proxy 类来创建代理对象。代理对象会在运行时实现代理接口，并覆盖其中的方法，在方法调用前后执行切面逻辑（即通知，advice）。
+
+CGLIB 动态代理：**对于未实现接口的类**，Spring AOP 会选择使用 CGLIB 库来生成代理对象。CGLIB 通过字节码技术创建目标类的子类，在子类中重写目标方法并在方法调用前后插入切面逻辑。
+
+
 ### 模板模式
 模板模式在父类中预先定义了一些行为，还有一些行为未定义交由子类实现，子类在实现自己的方法后通过调用相关接口就可以执行父类预定义行为+自己定义的行为
 ```
@@ -618,15 +624,24 @@ public class Adapter implements Target {
 }
 ```
 适配器模式和装饰器模式的区别在于，适配器模式是在适配器类调用与被适配类不同的方法(要适配的Target接口)，装饰器模式是在装饰类里调用与被装饰类相同的方法以达到增强的目的。
-
+### 原型模式
+原型模式是指通过深拷贝的方式创建一个重复的对象，这种模式是实现了一个原型接口，该接口用于创建当前对象的克隆。当直接创建对象的代价比较大时，则采用这种模式。
 # Java并发
 
 ## 锁
 ### volatile
 volatile关键字可以使得变量对所有的线程都可见，但不具备原子性，不能保证变量操作的原子性。volatile关键字可以通过插入特定的内存屏障的方式来禁止指令重排序，volatile只能用于变量，它可以看作是进程同步的轻量级实现
 
+volatile 关键字用于修饰变量时，能够保证该变量的可见性和有序性。关于有序性，volatile 通过内存屏障的插入来实现：
+
+写内存屏障（Store Barrier / Write Barrier）： 当线程写入 volatile 变量时，JMM 会在写操作前插入 StoreStore 屏障，确保在这次写操作之前的所有普通写操作都已完成。接着在写操作后插入 StoreLoad 屏障，强制所有后来的读写操作都在此次写操作完成之后执行，这就确保了其他线程能立即看到 volatile 变量的最新值。
+读内存屏障（Load Barrier / Read Barrier）： 当线程读取 volatile 变量时，JMM 会在读操作前插入 LoadLoad 屏障，确保在此次读操作之前的所有读操作都已完成。而在读操作后插入 LoadStore 屏障，防止在此次读操作之后的写操作被重排序到读操作之前，这样就确保了对 volatile 变量的读取总是能看到之前对同一变量或其他相关变量的写入结果。
+
+关于可见性，volatile 内存可见性主要通过 lock 前缀指令实现的，它会锁定当前内存区域的缓存（缓存行），并且立即将当前缓存行数据写入主内存（耗时非常短），回写主内存的时候会通过 MESI 协议使其他线程缓存了该变量的地址失效，从而导致其他线程需要重新去主内存中重新读取数据到其工作线程中。
+
+
 ### 乐观锁
-乐观锁：每次假设最好的情况，线程可以不停的执行，无需加锁也无需等待。具体的实现方法有CAS算法和版本号算法，CAS算法会有一个要更新的值V,预期值E,拟写入的新值N，只有当V==E时才会写入新值，否则放弃更新，因为V != E时说明有其他线程修改过了，因此不应该再执行更新。但是仍然存在ABA问题，并且CAS的自旋操作也会给cpu带来负担
+乐观锁：每次假设最好的情况，线程可以不停的执行，无需加锁也无需等待。具体的实现方法有CAS算法和版本号算法，CAS算法会有一个要更新的值V,预期值E,拟写入的新值N，只有当V==E时才会写入新值，否则放弃更新，因为V != E时说明有其他线程修改过了，因此不应该再执行更新。但是仍然存在ABA问题，并且CAS的自旋操作也会给cpu带来负担。ABA的解决方法有加版本号或者时间戳
 
 ### 悲观锁
 悲观锁：每次都假设最坏的情况，线程在进行操作前必须上锁，具体的实现方法有synchronized和ReentrantLock。在高并发的情况下，激烈的锁竞争会导致大量线程阻塞，线程阻塞会带来大量线程上下文切换，增加系统的性能开销。
@@ -651,7 +666,7 @@ synchronized(this) {
 synchronized(类.class) 表示进入同步代码前要获得 给定 Class 的锁
 
 ```
-synchronized底层：在修饰代码块的时候，synchronized通过monitorenter和monitorexit实现，在进入先执行monitorenter获得锁，执行完毕后通过monitorexit释放锁，如果获取锁失败则会阻塞等待
+synchronized底层：每个锁都有一个monitor对象。在修饰代码块的时候，synchronized通过monitorenter和monitorexit实现，在进入先执行monitorenter获得锁，执行完毕后通过monitorexit释放锁，如果获取锁失败则会阻塞等待
 在修饰方法的时候，synchronized 修饰的方法并没有 monitorenter 指令和 monitorexit 指令，取得代之的确实是 ACC_SYNCHRONIZED 标识，该标识指明了该方法是一个同步方法，从而进行相应的同步调用
 
 jdk1.6以后，synchronized有四种状态：
@@ -664,6 +679,19 @@ jdk1.6以后，synchronized有四种状态：
 4.重量级锁，当资源已经被线程占有，此时为偏向锁或者轻量级锁状态，此时再有其他进程来竞争，那么会升级为重量级锁，**重量级锁由操作系统实现，开销比较高**
 ### ReentrantLock
 ReentrantLock：与synchronized类似，也是一个可重入且独占的锁，只不过它实现公平锁（先来的进程先获得锁），而synchronized只有非公平锁；它可以实现中断等待锁，使得等待锁的进程可以放弃等待去做其他事情，这个是通过lock.lockInterruptibly来实现；它可以用Condition接口和newCondition()方法来实现选择性通知
+
+### synchronized 和 volatile区别
+volatile 关键字是线程同步的轻量级实现，所以 volatile性能肯定比synchronized关键字要好 。但是 volatile 关键字只能用于变量而 synchronized 关键字可以修饰方法以及代码块 。
+volatile 关键字能保证数据的可见性，但不能保证数据的原子性。synchronized 关键字两者都能保证。
+volatile关键字主要用于解决变量在多个线程之间的可见性，而 synchronized 关键字解决的是多个线程之间访问资源的同步性。
+
+### synchronized 和 lock区别
+1.两者都是可重入锁
+2.synchronized 依赖于 JVM 而 ReentrantLock 依赖于 API
+3.相比synchronized，ReentrantLock增加了一些高级功能。主要来说主要有三点：
+等待可中断 : ReentrantLock提供了一种能够中断等待锁的线程的机制，通过 lock.lockInterruptibly() 来实现这个机制。也就是说正在等待的线程可以选择放弃等待，改为处理其他事情。
+可实现公平锁 : ReentrantLock可以指定是公平锁还是非公平锁。而synchronized只能是非公平锁。所谓的公平锁就是先等待的线程先获得锁。ReentrantLock默认情况是非公平的，可以通过 ReentrantLock类的ReentrantLock(boolean fair)构造方法来指定是否是公平的。
+可实现选择性通知（锁可以绑定多个条件）: synchronized关键字与wait()和notify()/notifyAll()方法相结合可以实现等待/通知机制。ReentrantLock类当然也可以实现，但是需要借助于Condition接口与newCondition()方法。
 
 ### 什么是可重入锁
 所谓可重入锁指的是在一个线程中可以多次获取同一把锁，比如一个线程在执行一个带锁的方法，该方法中又调用了另一个需要相同锁的方法，则该线程可以直接执行调用的方法即可重入 ，而无需重新获得锁。
@@ -712,12 +740,18 @@ ThradLocalMap的key为ThreadLocal的弱引用，而值为强引用，因此当Th
 线程池：就是管理一系列线程的资源池，当需要使用线程时从池子里取，使用完之后返还，提高了线程的利用率，降低了重复创建和销毁线程带来的开销
 
 创建线程池的方法：最好通过ThreadPoolExecutor创建，因为其构造函数能更准确说明线程池的运行规则。线程池的三个最重要的参数为corePoolSize，maximumPoolSize，workQueue三个参数是线程池最重要的三个参数，分别指示了线程池的核心线程数，线程池最大可创建的线程数，以及阻塞序列
-任务在请求线程是时，如果核心线程池未满，则创建一个核心线程，如果核心线程池已满，但未达到最大线程数，则创建一个线程，如果都满了而阻塞队列没满，那么加入阻塞队列中，如果阻塞队列也满了，那么会按照饱和策略执行，通常有以下几种饱和策略：
+任务在请求线程，如果核心线程池未满，则创建一个核心线程，如果核心线程池已满，那么会将其加入工作队列中，如果工作队列已满，那么会尝试创建新线程，如果已经达到了最大线程数，那么会执行饱和策略，通常有以下几种饱和策略：
 ```
 ThreadPoolExecutor.AbortPolicy： 抛出RejectedExecutionException来拒绝新任务的处理。
 ThreadPoolExecutor.CallerRunsPolicy： 调用执行自己的线程运行任务，也就是直接在调用execute方法的线程中运行(run)被拒绝的任务，如果执行程序已关闭，则会丢弃该任务。因此这种策略会降低对于新任务提交速度，影响程序的整体性能。如果您的应用程序可以承受此延迟并且你要求任何一个任务请求都要被执行的话，你可以选择这个策略。
 ThreadPoolExecutor.DiscardPolicy： 不处理新任务，直接丢弃掉。
 ThreadPoolExecutor.DiscardOldestPolicy： 此策略将丢弃最早的未处理的任务请求。
+```
+```
+FixedThreadPool：该方法返回一个固定线程数量的线程池。该线程池中的线程数量始终不变。当有一个新的任务提交时，线程池中若有空闲线程，则立即执行。若没有，则新的任务会被暂存在一个任务队列中，待有线程空闲时，便处理在任务队列中的任务。
+SingleThreadExecutor： 该方法返回一个只有一个线程的线程池。若多余一个任务被提交到该线程池，任务会被保存在一个任务队列中，待线程空闲，按先入先出的顺序执行队列中的任务。
+CachedThreadPool： 该方法返回一个可根据实际情况调整线程数量的线程池。初始大小为 0。当有新任务提交时，如果当前线程池中没有线程可用，它会创建一个新的线程来处理该任务。如果在一段时间内（默认为 60 秒）没有新任务提交，核心线程会超时并被销毁，从而缩小线程池的大小。
+ScheduledThreadPool：该方法返回一个用来在给定的延迟后运行任务或者定期执行任务的线程池。
 ```
 常见的线程池阻塞队列：
 无界队列LinkedBlockingQueue，FixThreadPool和SingleThreadPool会选用，它的任务队列长度永远不会放满
@@ -727,7 +761,7 @@ LinkedBlockingQueue和DalayWorkQueue可能会因为请求过多而OOM
 
 Future类是异步思想的应用。当一个任务太耗时时，可以启动一个子线程去完成，等事情干完之后再通过Future 类获取到耗时任务的执行结果。
 ### AQS
-AQS是什么：AQS 核心思想是，如果被请求的共享资源空闲，则将当前请求资源的线程设置为有效的工作线程，并且将共享资源设置为锁定状态。如果被请求的共享资源被占用，那么就需要一套线程阻塞等待以及被唤醒时锁分配的机制，这个机制 AQS 是用 CLH 队列锁 实现的，即将暂时获取不到锁的线程加入到队列中。
+AQS是什么：AQS 核心思想是，如果被请求的共享资源空闲，则将当前请求资源的线程设置为有效的工作线程，并且将共享资源设置为锁定状态。如果被请求的共享资源被占用，那么就需要一套线程阻塞等待以及被唤醒时锁分配的机制，这个机制 AQS 是用 CLH 队列锁 实现的，即将暂时获取不到锁的线程加入到队列中。AQS的队列指的是一个等待的概念，并不是真的有一个队列
 ![](./static/AQS.png)
 AQS是通过int变量成员State表示状态的，它被volatile修饰，对所有线程可见
 对于独占锁，以ReentrantLock为例，state为0表示资源未被占用，当线程lock（）时，会使state+1，其他线程就无法获取而阻塞，当线程执行完毕后，则将state-1，其他线程才有机会得到锁
@@ -885,6 +919,82 @@ JVM的组成：
 	操作数栈：存放临时变量
 	局部变量数组：存放局部变量
 5.属性
+
+## 一些JVM参数
+-Xmx4g：堆内存最大值为4GB。
+
+-Xms4g：初始化堆内存大小为4GB。
+
+-Xmn1200m：设置年轻代大小为1200MB。增大年轻代后，将会减小年老代大小。此值对系统性能影响较大，Sun官方推荐配置为整个堆的3/8。
+
+-Xss512k：设置每个线程的java栈大小。JDK5.0以后每个线程java栈大小为1MB，以前每个线程java栈大小为256K。应根据应用线程所需内存大小进行调整。在相同物理内存下，减小这个值能生成更多的线程。但是操作系统对一个进程内的线程数还是有限制的，不能无限生成，经验值在3000~5000左右。
+
+-XX:NewRatio=4：设置年轻代（包括Eden和两个Survivor区）与年老代的比值（除去持久代）。设置为4，则年轻代与年老代所占比值为1：4，年轻代占整个堆栈的1/5
+
+-XX:SurvivorRatio=8：设置年轻代中Eden区与Survivor区的大小比值。设置为8，则两个Survivor区与一个Eden区的比值为2:8，一个Survivor区占整个年轻代的1/10
+
+-XX:PermSize=100m：初始化永久代大小为100MB。
+
+-XX:MaxPermSize=256m：设置持久代大小为256MB。
+
+-XX:MaxTenuringThreshold=15：设置垃圾最大年龄。如果设置为0的话，则年轻代对象不经过Survivor区，直接进入年老代。对于年老代比较多的应用，可以提高效率。如果将此值设置为一个较大值，则年轻代对象会在Survivor区进行多次复制，这样可以增加对象再年轻代的存活时间，增加在年轻代即被回收的概论。
+
+**可调优参数**：
+
+-Xms：初始化堆内存大小，默认为物理内存的1/64(小于1GB)。
+
+-Xmx：堆内存最大值。默认(MaxHeapFreeRatio参数可以调整)空余堆内存大于70%时，JVM会减少堆直到-Xms的最小限制。
+
+-Xmn：新生代大小，包括Eden区与2个Survivor区。
+
+-XX:SurvivorRatio=1：Eden区与一个Survivor区比值为1:1。
+
+-XX:MaxDirectMemorySize=1G：直接内存。报java.lang.OutOfMemoryError: Direct buffer memory异常可以上调这个值。
+
+-XX:+DisableExplicitGC：禁止运行期显式地调用System.gc()来触发fulll GC。
+
+注意: Java RMI的定时GC触发机制可通过配置-Dsun.rmi.dgc.server.gcInterval=86400来控制触发的时间。
+
+-XX:CMSInitiatingOccupancyFraction=60：老年代内存回收阈值，默认值为68。
+
+-XX:ConcGCThreads=4：CMS垃圾回收器并行线程线，推荐值为CPU核心数。
+
+-XX:ParallelGCThreads=8：新生代并行收集器的线程数。
+
+-XX:MaxTenuringThreshold=10：设置垃圾最大年龄。如果设置为0的话，则年轻代对象不经过Survivor区，直接进入年老代。对于年老代比较多的应用，可以提高效率。如果将此值设置为一个较大值，则年轻代对象会在Survivor区进行多次复制，这样可以增加对象再年轻代的存活时间，增加在年轻代即被回收的概论。
+
+-XX:CMSFullGCsBeforeCompaction=4：指定进行多少次fullGC之后，进行tenured区 内存空间压缩。
+
+-XX:CMSMaxAbortablePrecleanTime=500：当abortable-preclean预清理阶段执行达到这个时间时就会结束。
+
+在设置的时候，如果关注性能开销的话，应尽量把永久代的初始值与最大值设置为同一值，因为永久代的大小调整需要进行FullGC才能实现。
+
+## stackoverflow和OOM
+1、stackoverflow：
+
+每当java程序启动一个新的线程时，java虚拟机会为他分配一个栈，java栈以帧为单位保持线程运行状态；当线程调用一个方法是，jvm压入一个新的栈帧到这个线程的栈中，只要这个方法还没返回，这个栈帧就存在。
+如果方法的嵌套调用层次太多(如递归调用),随着java栈中的帧的增多，最终导致这个线程的栈中的所有栈帧的大小的总和大于-Xss设置的值，而产生生StackOverflowError溢出异常。
+
+2、outofmemory：
+
+2.1、栈内存溢出
+
+java程序启动一个新线程时，没有足够的空间为改线程分配java栈，一个线程java栈的大小由-Xss设置决定；JVM则抛出OutOfMemoryError异常。
+
+2.2、堆内存溢出
+
+java堆用于存放对象的实例，当需要为对象的实例分配内存时，而堆的占用已经达到了设置的最大值(通过-Xmx)设置最大值，则抛出OutOfMemoryError异常。
+
+2.3、方法区内存溢出
+
+方法区用于存放java类的相关信息，如类名、访问修饰符、常量池、字段描述、方法描述等。在类加载器加载class文件到内存中的时候，JVM会提取其中的类信息，并将这些类信息放到方法区中。
+当需要存储这些类信息，而方法区的内存占用又已经达到最大值（通过-XX:MaxPermSize）；将会抛出OutOfMemoryError异常对于这种情况的测试，基本的思路是运行时产生大量的类去填满方法区，直到溢出。这里需要借助CGLib直接操作字节码运行时，生成了大量的动态类。
+
+个人理解：
+
+stackoverflow，是线程运行时报的错，表示当前线程使用的栈内存已经超过最大值了。一般是是由于递归调用（一个线程内的方法递归调用），或者申请的局部变量太大，产生了超过栈内存最大值的数据。
+
+outofmemory，是数据创建前报的错，表示当前剩余的内存已经不够了，不能创建新的数据了。
 ## 类的生命加载周期
 类的生命加载周期：加载——
 连接（验证（验证字节码文件是否满足jvm规范），准备（给静态变量赋初值），解析（将常量池中的符号引用替换成指向内存的直接引用）），final修饰的基本类型静态变量，在准备阶段会直接进行赋值——
@@ -900,6 +1010,10 @@ JVM的组成：
 1.访问父类的静态变量，只初始化父类
 2.在执行子类的clinit方法前，会先执行父类的clinit方法
 
+## 对象的创建
+在对象创建之前需要先加载类信息。在加载完类之后，会根据类元确定对象的大小，向堆中申请一块内存区域并构建对象，同时对对象的成员变量赋默认值
+之后，会执行对象内部的init方法，初始化成员变量值，同时执行{}代码块的内容，最后执行对象的构造方法
+对象实例化完成后，会将对象的引用地址(在栈上)指向对象在堆中的地址
 ## 类加载器
 类加载器分为虚拟机底层实现（启动类加载器bootstrap）和java实现（扩展类加载器Extension和应用程序类加载器Application）
 bootstrap默认加载java安装目录%JAVA_HOME%/lib下的类文件，比如rt.jar等,字符串类,java中最核心的类
@@ -916,6 +1030,12 @@ AppClassloader的父加载器是ExtensionClassloader，ExtensionClassloader的�
 
 2.线程上下文加载器：将一个类加载器保存在线程的私有数据中，跟线程进行绑定，在需要的时候取出来使用，这样就可以让高层的类加载器借助子类加载器加载业务类。
 获取和设置线程的上下文加载器的方法：Thread.currentThread().getContextClassLoader(),Thread.currentThread().setContextClassLoader(ClassLoader cl);
+使用上下文加载器的情景：
+比如，SPI 中，SPI 的接口（如 java.sql.Driver）是由 Java 核心库提供的，由BootstrapClassLoader 加载。而 SPI 的实现（如com.mysql.cj.jdbc.Driver）是由第三方供应商提供的，它们是由应用程序类加载器或者自定义类加载器来加载的。默认情况下，**一个类及其依赖类由同一个类加载器加载**。所以，加载 SPI 的接口的类加载器（BootstrapClassLoader）也会用来加载 SPI 的实现。按照双亲委派模型，BootstrapClassLoader 是无法找到 SPI 的实现类的，因为它无法委托给子类加载器去尝试加载。
+
+再比如，假设我们的项目中有 Spring 的 jar 包，由于其是 Web 应用之间共享的，因此会由 SharedClassLoader 加载（Web 服务器是 Tomcat）。我们项目中有一些用到了 Spring 的业务类，比如实现了 Spring 提供的接口、用到了 Spring 提供的注解。所以，加载 Spring 的类加载器（也就是 SharedClassLoader）也会用来加载这些业务类。但是业务类在 Web 应用目录下，不在 SharedClassLoader 的加载路径下，所以 SharedClassLoader 无法找到业务类，也就无法加载它们。
+![alt text](image-7.png)
+
 
 3.osgi模块化
 
@@ -923,33 +1043,38 @@ AppClassloader的父加载器是ExtensionClassloader，ExtensionClassloader的�
 线程共享：方法区，堆区
 线程不共享：程序计数器，本地方法栈，Java虚拟机栈
 
-Java虚拟机栈用于保存Java方法调用，在方法执行过程中会依据栈的形式进出栈，每一个方法称为栈帧，栈帧由局部变量表，操作数栈，帧数据组成
+堆（Heap）：这是Java虚拟机中的一块内存区域，所有线程共享。它主要用于存储对象实例和数组。堆被划分为年轻代、老年代和永久代（在JDK8中取消了永久代）。年轻代又被划分为Eden区、Survivor区（含：S0和S1）。默认情况下，年轻代和老年代的比例为1:2，即年轻代占整个堆空间的1/3，老年代占整个堆空间的2/3。
 
-局部变量表：在方法执行过程中存放所有的局部变量。栈帧中的局部变量表是一个数组，数组中每一个位置称为一个槽，槽是可以复用的，一旦某个局部变量不生效，当前槽就可以复用。局部变量表中的变量：this(实例的引用)，形参，方法体中的参数组成
+方法区（Method Area）：这也是线程共享的内存区域，主要用于存储已被虚拟机加载的类信息、常量、静态变量、即时编译器编译后的代码等数据。
 
-操作数栈：存放运算过程中的临时变量
+虚拟机栈（VM Stack）：每个线程运行时所需要的内存称为虚拟机栈。每个栈由多个栈帧组成，对应着每次方法调用时所占用的内存，用于存储局部变量表(局部变量表中存放着基本数据类型的变量和对象的引用)、操作数栈、常量池引用等信息。
 
-帧数据主要包括：1.动态链接：保存了符号引用转换为对应运行时常量池中的内存地址
-2.方法出口：指栈帧弹出时，存放的下一个栈帧中的下一条指令的位置
-3.存放了代码中异常的处理信息，包含异常捕获的生效范围以及异常发生后跳转到的字节码指令的位置
+程序计数器（Program Counter Register）：用于记录下一条JVM指令的执行地址（如果正在执行的是本地方法则为空）。每一个线程都有一个程序计数器，当CPU因为时间片轮转等原因切换线程的时候，能保存当前线程的执行进度。同时，程序计数器不会存在内存溢出。
 
-本地方法栈：本地方法栈用于保存本地方法调用时的栈帧，hotspot中本地方法和Java方法保存在同一个栈中
+本地方法栈（Native Method Stack）：这也是线程私有的，用于支持native方法的执行。hotspot中本地方法和Java方法保存在同一个栈中
+
 
 ————————共享——————————————
 堆区：空间最大的一块内存区域，创建出来的对象都存在于堆上，有三个参数used，total，max，分别指示了已使用，总共，最大的堆空间
 
-方法区：包括类的基本信息（元信息），运行时常量池，字符串常量池
+方法区：包括类的基本信息（元信息），运行时常量池，字符串常量池，全部变量
 
-在JDK7及以前，方法区是存放在内存空间中的永久代上；JDK8以后，存放在操作系统的直接内存中的元空间中
+在JDK1.7及以前，方法区是存放在内存空间中的永久代上；JDK1.8以后，存放在操作系统的直接内存中的元空间中
 
 字节码文件通过编号查表的方式找到常量，这种常量池称为静态常量池；当常量池加载到内存中，可以通过内存地址快速的定位到常量池中的内容，这种常量池称为运行时常量池
 
 字符串常量池：存储在代码中定义的常量字符串内容，比如"123"，使用+连接两个字符串变量，会导致在堆上创建对象，使用+连接两个字符串常量，会导致在编译阶段直接连接，并在字符串常量池中建立对象
 
-JDK7之前，静态变量存放在永久代中，JDK及之后，静态变量存放在堆中的Class对象中
+JDK1.7 之前，字符串常量池存放在永久代。JDK1.7 字符串常量池和静态变量从永久代移动了 Java 堆中。
 
 要创建直接内存上的数据，可以使用ByteBuffer
 语法：ByteBuffer bf = ByteBuffer.allocateDirect（size）
+
+## Error和Excpetion
+两者的顶级父类都是throwable
+Exception（异常）是应用程序中可能的可预测、可恢复问题。一般大多数异常表示中度到轻度的问题。异常一般是在特定环境下产生的，通常出现在代码的特定方法和操作中。
+Exception又分为**运行时异常（Unchecked Exception）和非运行时异常（Checked Exception）**，其中非运行时异常必须进行异常捕获，否则会编译不通过
+.Error（错误）表示运行应用程序中较严重问题。大多数错误与代码编写者执行的操作无关，而表示代码运行时 JVM（Java 虚拟机）出现的问题。例如，当 JVM 不再有继续执行操作所需的内存资源时，将出现 OutOfMemoryError。
 
 ## 垃圾回收机制
 1.触发young gc的时机：当Eden区没有足够空间时，会触发一次Young GC
@@ -975,12 +1100,20 @@ String，hash，List，Set，Zset
 hash的底层实现是hashmap或listpack
 list的底层实现是quicklist
 set的底层实现是hashmap或整数集合
-zset的底层实现是listpack或跳表
+zset的底层实现是listpack或跳表，zset也有map，但是map主要是为了实现更方便的单点查找，主要实现还是跳表
 
 ## 为什么用跳表而不是平衡树？
 1.跳表更适合范围查询
 2.跳表修改起来更为便捷
 3.跳表的内存占用比平衡树要少，因为平均只需要1/(1-0.25)的指针，0.25是增加层数的概率
+
+跳表的查询过程：要查找一个节点p，那么
+从头节点的最高层查起，**如果p的权重大于最高层的下一个节点**，那么就会移动到最高层的下一个节点
+如果**p的权重等于最高层的下一个节点的权重，并且p的SDS元素大于最高层下一个节点的SDS元素**，会移动到下一个节点
+如果**p的权重小于最高层下一个节点的权重**，那么会移动到头节点**level数组**的下一个节点，相当于**移动到下一层**，**如果节点的下一个节点为空也会移动到下一层**
+如果**p的权重等于最高层的下一个节点的权重，并且p的SDS元素小于最高层下一个节点的SDS元素**，会移动到下一个节点
+移动到下一个节点后，依然是和它的下一个节点进行比较，进入上述的移动，直到找到节点为止
+
 
 listpack比起压缩列表，去掉了prev字段，使得在插入时不需要多米诺骨牌似的更新prev
 quicklist相当于双向链表+压缩列表，压缩列表作为值存储在节点中
@@ -1093,8 +1226,51 @@ NX即为上面的锁，PX 10000设置过期时间为10s，防止线程持有锁�
 4.将旧主节点指向新的主节点
 
 # spring
+## MVC模型
+![alt text](image-8.png)
 ## spring事务
+![alt text](image-11.png)
+```
+@RestController
+public class UserController {
+    private LogService logService;
 
+    @Transactional
+    public Object save(User user) {
+        // 插入用户操作
+        userService.save(user);
+        // 插入日志
+        logService.saveLog("用户插入：" + user.getName());
+        return true;
+    }
+}
+
+public class UserService {
+    @Resource
+    private UserMapper userMapper;
+
+    @Transactional(propagation = Propagation.REQUIRED_NEW)
+    public int save(User user) {
+        return userMapper.save(user);
+    }
+}
+
+public class LogService {
+    @Resource
+    private LogMapper logMapper;
+
+    @Transactional(propagation = Propagation.NESTED)
+    public int saveLog(String content) {
+        // 出现异常
+        int i = 10 / 0;
+        return logMapper.saveLog(content);
+    }
+}
+```
+REQURES_NEW和NESTED都会开启新事务，在当前事务失败后不会影响外部事务。不同的是，REQUERES_NEW开启的**新事务可能会在外部事务完成之前进行提交**,而NESTED开启的**新事务会随着外部事务一起进行提交**。
+比如UserService开启的事务是REQUIRED_NEW，那么UserService会**开启自己的新事务，并将当前事务挂起**，在完成后就会提交，在外部Controller的事务发生异常时Controller的事务回滚，但是UserService的事务已经提交了，不能回滚，这就会造成脏数据的产生
+LogService开启的事务是NESTED，那么LogService也会**开启一个新事务，但是这个事务是和外部事务嵌套的**，在LogService事务完成后，它并不会马上提交，而是会和外部Controller的事务一起提交，不会造成脏数据的产生
+REQUIRED_NEW的应用场景是需要进行某些独立的操作，而NESTED的应用场景是需要进行某些子操作
 ## Spring是如何解决的循环依赖
 Spring通过三级缓存解决了循环依赖，其中一级缓存为单例池（singletonObjects）,二级缓存为早期曝光对象earlySingletonObjects，三级缓存为早期曝光对象工厂（singletonFactories）。当A、B两个类发生循环引用时，在A完成实例化后，就使用实例化后的对象去创建一个对象工厂，并添加到三级缓存中，如果A被AOP代理，那么通过这个工厂获取到的就是A代理后的对象，如果A没有被AOP代理，那么这个工厂获取到的就是A实例化的对象。当A进行属性注入时，会去创建B，同时B又依赖了A，所以创建B的同时又会去调用getBean(a)来获取需要的依赖，此时的getBean(a)会从缓存中获取，第一步，先获取到三级缓存中的工厂；第二步，调用对象工工厂的getObject方法来获取到对应的对象，得到这个对象后将其注入到B中。紧接着B会走完它的生命周期流程，包括初始化、后置处理器等。当B创建完后，会将B再注入到A中，此时A再完成它的整个生命周期。至此，循环依赖结束
 
@@ -1122,10 +1298,72 @@ public class CookPatato implements Cook
 @Primary
 public class CookPatato implements Cook
 ```
+## 依赖注入的原理
+1.通过依赖类的构造函数注入
+2.通过依赖类的setter函数注入
+3.通过依赖类实现接口的方式
+```
+public interface BoyInjection {
+
+    void inject(Boy boy);
+}
+public class Classes implements BoyInjection {
+    //....
+
+    private Boy boy;
+
+    @Override
+    public void inject(Boy boy) {
+        //实现接口中的方法
+        this.boy = boy;
+    }
+}
+```
+4.通过字段@Autowired或者@Resource注入
+## bean的生命周期
+![alt text](image-9.png)
+![alt text](image-10.png)
+populate中的对象属性为bean对象持有的其他自定义bean，如User，Service等
+Aware相关接口用于获取相关资源，如果第2步中bean属性实现了相关的Aware接口，那么就会调用相关Aware接口执行set方法，比如**实现了BeanFactoryAware方法，那么就会执行setBeanFactory**
+bean前置处理和bean后置处理为**执行初始化前后的自定义操作**
+InitailizingBean为初始化方法，有@PostConstruct,InitializingBean.afterPropertiesSet(),和init-method().其中，**PostConstruct会在构造函数之后，init函数之前执行（如果有）**，**afterPropertiesSet()会在PostConstruct之后，init-method之前执行**
+**init-method用来在bean初始化的时候执行指定方法，比如数据库连接之类的**
+在销毁阶段，如果bean是单例模式，那么会先调用**DisposableBean.destory()**，然后调用**destory-method**
+```
+public class InitMethod  {
+ 
+    // 在@Bean注解上添加initMethod属性，指向类中的 initMethod_1 执行初始化方法
+    // 在@Bean注解上添加destroyMethod属性，指向类中的 destroyMethod_1 执行销毁方法
+    @Bean(initMethod = "initMethod_1",destroyMethod = "destroyMethod_1")
+    public BeanTest getBeanTest(){
+        return new BeanTest();
+    }
+}
+BeanTest.java
+
+package com.Spring.Boot.init.bean;
+ 
+public class BeanTest {
+ 
+    // 将要执行的初始化方法
+    public void initMethod_1(){
+        System.out.println("我是beanTest的init方法");
+    }
+ 
+    // 将要执行的销毁方法
+    public void destroyMethod_1(){
+        System.out.println("我是beanTest的init方法");
+    }
+ 
+ 
+}
+```
+如果是原型模型，那么会返回bean给用户由用户处理。原型模式是指通过深拷贝的方式创建一个重复的对象，这种模式是实现了一个原型接口，该接口用于创建当前对象的克隆。当直接创建对象的代价比较大时，则采用这种模式。
+## bean会有线程安全问题吗
 # mq
 ## mq消息丢失问题
 mq消息丢失可能存在三种可能，生产者端丢失，mq丢失，消费者取到了消息但还没处理造成的丢失
-针对生产者端：1.开始raabitMQ的事务机制，在发送数据之前开启事务，如果消息没被mq接收到生产者端会报错，此时可以回滚事务然后重发消息，如果收到了消息就可以提交事务
+针对生产者端：1.开始rabbitMQ的事务机制，在发送数据之前开启事务，如果消息没被mq接收到生产者端会报错，此时可以回滚事务然后重发消息，如果收到了消息就可以提交事务
 2.使用confirm机制，confirm机制和事务最大的不同就是它是异步的。开启confirm机制后，每个消息会有一个独特的id，mq收到消息后会返回一个ack，如果没有收到消息会回调nack接口告知发送失败，这时可以尝试重发；同时，因为每个消息都有唯一的id，因此在一段时间后没有收到ack，生产者端可以自己重发消息
 
 针对mq端：对mq的消息持久化到硬盘上
@@ -1156,6 +1394,12 @@ IP数据包在路由器之间，路由选择使用OPSF协议， 采用Dijkstra�
 ### time-wait过多的危害
 1.文件描述符占用，得不到释放，占用cpu资源，内存资源，线程资源
 2.端口资源被占用，对于客户端来说，相同的源端口和目标端口的连接是有限的，过多的time-wait会使得无法建立相同的源端口和目标端口，但是不同的相同的源端口去连接不同目标端口还是可以连接的
+
+### 为什么会出现过多的time-wait
+1.连接方式采用的短连接，执行完一个请求就进入time-wait状态
+2.长连接超时。客户端超过一定时间没有发起请求，服务端断开连接
+3.HTTP 长连接的请求数量达到上限。Web 服务端通常会有个参数，来定义一条 HTTP 长连接上最大能处理的请求数量，当超过最大限制时，就会主动关闭连接。比如nginx 的 keepalive_requests 这个参数，这个参数是指一个 HTTP 长连接建立之后，nginx 就会为这个连接设置一个计数器，记录这个 HTTP 长连接上已经接收并处理的客户端请求的数量。keepalive_requests 参数的默认值是 100 ，意味着每个 HTTP 长连接最多只能跑 100 次请求，这个参数往往被大多数人忽略，因为当 QPS (每秒请求数) 不是很高时，默认值 100 凑合够用。但是，对于一些 QPS 比较高的场景，比如超过 10000 QPS，甚至达到 30000 , 50000 甚至更高，如果 keepalive_requests 参数值是 100，这时候就 nginx 就会很频繁地关闭连接，那么此时服务端上就会出大量的 TIME_WAIT 状态。
+
 
 ### 连接过多时会发生什么
 在tcp全连接队列满之后，会采取两种策略，一种是丢弃ACK，一种是向客户端发送reset终止当前连接。一般会采取第一种策略，因为如果服务器只是短暂繁忙，那么当tcp全连接队列有空位时，由于客户端会重发ACK，那么此时可以重新连接，有助于应对突发流量
@@ -1348,6 +1592,8 @@ if (!seckillGoodsResult) {
 
 ## 减少sql访问
 1.通过redis库存预减减少对mysql的访问
+redis库存预减必须实现原子性，不然会失效(如果没有原子性，可能存在很多线程读取到符合要求的stock值，这时候还是会有很多线程会访问数据库。但是原子性保证了线程可以在最短的时间内改变redis里库存的值，不至于因为其他因为导致迟迟不能修改库存的值使得后续线程读到符合要求的库存值)，通过lua脚本实现读库存和写库存的原子性
+
 2.通过内存标记减少对redis的访问
 
 ## 解决重复抢购问题
@@ -1384,6 +1630,16 @@ shift+n  反向查找关键字
 报告进程：ps(ps -ef|grep xxx)
 
 # OS
+## 进程与线程区别
+本质区别：进程是操作系统资源分配的基本单位，而线程是任务调度和执行的基本单位
+
+在开销方面：每个进程都有独立的代码和数据空间（程序上下文），程序之间的切换会有较大的开销；线程可以看做轻量级的进程，同一类线程共享代码和数据空间，每个线程都有自己独立的运行栈和程序计数器（PC），线程之间切换的开销小
+
+稳定性方面：进程中某个线程如果崩溃了，可能会导致整个进程都崩溃。而进程中的子进程崩溃，并不会影响其他进程。
+
+内存分配方面：系统在运行的时候会为每个进程分配不同的内存空间；而对线程而言，除了CPU外，系统不会为线程分配内存（线程所使用的资源来自其所属进程的资源），线程组之间只能共享资源
+
+包含关系：没有线程的进程可以看做是单线程的，如果一个进程内有多个线程，则执行过程不是一条线的，而是多条线（线程）共同完成的；线程是进程的一部分，所以线程也被称为轻权进程或者轻量级进程
 ## 零拷贝
 零拷贝指的是减少数据在缓冲区之间的拷贝次数以及系统调用的次数。
 
@@ -1417,3 +1673,8 @@ Selector 是基于事件驱动的 I/O 多路复用模型(**也就是前面说的
 2.wait/notify
 3.condition的signal/await
 4.join
+## 什么是协程
+## 僵尸线程和孤儿线程
+僵尸进程：一个进程使用fork创建子进程，**子进程退出**，但是父进程并没有调用wait或waitpid获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中（会占用进程号之类，还有占用的内存）
+
+孤儿进程：**一个父进程退出**，但它的一个或多个子进程还在运行，那么这些子进程将成为孤儿进程。孤儿进程将被init进程(进程号为1)所收养，并由init进程对它们完成状态收集工作。

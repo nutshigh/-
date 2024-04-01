@@ -23,6 +23,13 @@ override
 }
 ```
 # 反射
+## 使用反射的一些例子
+
+1.Spring/Springboot等框架大量使用动态代理，**动态代理依赖于反射机制**。
+
+2.注解也使用了反射
+
+
 ## 获取Class类实例的几个方式：
 1.若已知具体的类，则通过该类的class属性获取
 ```
@@ -38,6 +45,91 @@ Class cla = Class.forName("com.company.Person");
 ```
 4.通过类加载器获取
 5.内置类型的包装类（Integer等）可以直接使用类名.Type
+
+## 反射使用实践
+1.创建需要反射的类
+```java
+package com.cytus.learnspb.exercises;
+
+/*
+* 反射需要使用的目标类
+* */
+public class TargetObject {
+    private String value;
+    public TargetObject()
+    {
+        value = "反射目标类";
+    }
+    public void publicMethod(String s)
+    {
+        System.out.println("one public method:"+s);
+    }
+    private void privateMethod(String s) {
+        System.out.println("one private method:" + s);
+    }
+}
+
+```
+2.反射使用该类
+```java
+package com.cytus.learnspb.exercises;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
+/*
+* 练习反射
+* */
+public class InvocationLearn {
+    // 使用反射操作TargetObject的方法和参数
+
+    public static void main(String[] args) throws ClassNotFoundException, NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchFieldException {
+        /*
+        * 1.获取TargetObject类的class对象，再为对象创建TargetObject实例
+        * 这里理解为:获取对象实际上获取的是TargetObject这个类的元信息对象(即Class的对象class)
+        * 然后通过元对象(class)的newInstance()方法创建TargetObject的实例
+        * */
+        // 通过类名的全路径加载，四种获得class对象的方式？
+        Class<?> targetClass = Class.forName("com.cytus.learnspb.exercises.TargetObject");
+        TargetObject targetObject = (TargetObject) targetClass.newInstance();
+
+        /*
+        * 获取TargetObject中的所有方法
+        * */
+        Method[] methods = targetClass.getDeclaredMethods();
+        // 打印所有方法名查看
+        for(Method method:methods)
+        {
+            System.out.println(method.getName());
+        }
+
+        /*
+        * 获取指定方法并调用
+        * 寻找方法时当然需要方法名和参数类型
+        * */
+        Method publicMethod = targetClass.getDeclaredMethod("publicMethod", String.class);
+        // invoke()调用方法，传入对象和方法的参数
+        publicMethod.invoke(targetObject,"反射调用方法"); // 用invoke调用对象的方法(为什么不能直接调用呢？)
+
+        /*
+        * 获取类中的指定参数并进行修改, Declared开头会获取所有，否则就只有公共的
+        * */
+        Field field = targetClass.getDeclaredField("value");
+        field.setAccessible(true); // 设置可访问权限
+        field.set(targetObject, "JavaGuide"); // 传入对象和值作为参数
+
+        /*
+        * 获得private参数并调用，多了setAccessible而已
+        * */
+        Method privateMethod = targetClass.getDeclaredMethod("privateMethod", String.class);
+        // invoke()调用方法，传入对象和方法的参数
+        privateMethod.setAccessible(true);
+        privateMethod.invoke(targetObject,"反射调用私有方法"); // 用invoke调用对象的方法(为什么不能直接调用呢？)
+    }
+}
+
+```
 ## 类的加载与初始化
 加载：将class文件字节码内容加载到内存中，并将这些静态数据转换成方法区的运行时数据结构，然后**生成一个代表这个类的java.lang.Class对象**
 

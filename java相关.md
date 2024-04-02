@@ -351,7 +351,72 @@ public class Test {
 }
 ```
 在此例中，通过InvocationHandlerImpl实现了一个UserDaoImpl的接口处理对象，UserDaoImpl是UserDao的实现类，之后通过Proxy.newProxyInstance生成一个代理实例newProxyInstance，在调用newProxyInstance.save()的时候，实际上会调用 InvocationHandlerImpl 中的 invoke() 方法来处理 save() 方法的调用。实际上是通过反射调用了UserDaoImpl的save方法
-动态代理是面向接口的，必须有接口的实现类
+动态代理是面向接口的，必须有接口的实现类。因为Proxy会生成一个UserDao的代理类，这个类继承了Proxy，而java是单继承的，所以只能通过实现接口的方式。实现接口的目的是为了持有接口/类的方法，用于重写
+```
+public final class $Proxy0 extends Proxy implements UserService { //$Proxy0是生成的代理类
+    private static Method m1;
+    private static Method m3;
+    private static Method m2;
+    private static Method m0;
+
+    public $Proxy0(InvocationHandler var1) throws  {
+        super(var1);
+    }
+
+    public final boolean equals(Object var1) throws  {
+        try {
+            return (Boolean)super.h.invoke(this, m1, new Object[]{var1});
+        } catch (RuntimeException | Error var3) {
+            throw var3;
+        } catch (Throwable var4) {
+            throw new UndeclaredThrowableException(var4);
+        }
+    }
+
+    public final int sava() throws  { //重写的方法
+        try {
+            return (Integer)super.h.invoke(this, m3, (Object[])null); //$proxy0继承了Proxy，super.h也即实现增强功能的InnovationHandler，调用了其invoke方法
+        } catch (RuntimeException | Error var2) {
+            throw var2;
+        } catch (Throwable var3) {
+            throw new UndeclaredThrowableException(var3);
+        }
+    }
+
+    public final String toString() throws  {
+        try {
+            return (String)super.h.invoke(this, m2, (Object[])null);
+        } catch (RuntimeException | Error var2) {
+            throw var2;
+        } catch (Throwable var3) {
+            throw new UndeclaredThrowableException(var3);
+        }
+    }
+
+    public final int hashCode() throws  {
+        try {
+            return (Integer)super.h.invoke(this, m0, (Object[])null);
+        } catch (RuntimeException | Error var2) {
+            throw var2;
+        } catch (Throwable var3) {
+            throw new UndeclaredThrowableException(var3);
+        }
+    }
+
+    static {
+        try {
+            m1 = Class.forName("java.lang.Object").getMethod("equals", Class.forName("java.lang.Object"));
+            m3 = Class.forName("com.tiantang.study.UserService").getMethod("sava");
+            m2 = Class.forName("java.lang.Object").getMethod("toString");
+            m0 = Class.forName("java.lang.Object").getMethod("hashCode");
+        } catch (NoSuchMethodException var2) {
+            throw new NoSuchMethodError(var2.getMessage());
+        } catch (ClassNotFoundException var3) {
+            throw new NoClassDefFoundError(var3.getMessage());
+        }
+    }
+}
+```
 #### CGLIB动态代理
 CGLIB动态代理原理：
 利用asm开源包，对代理对象类的class文件加载进来，通过修改其字节码生成子类来处理。
@@ -1400,12 +1465,51 @@ LogService开启的事务是NESTED，那么LogService也会**开启一个新事�
 REQUIRED_NEW的应用场景是需要进行某些独立的操作，而NESTED的应用场景是需要进行某些子操作
 ## Spring是如何解决的循环依赖
 Spring通过三级缓存解决了循环依赖，其中一级缓存为单例池（singletonObjects）,二级缓存为早期曝光对象earlySingletonObjects，三级缓存为早期曝光对象工厂（singletonFactories）。当A、B两个类发生循环引用时，在A完成实例化后，就使用实例化后的对象去创建一个对象工厂，并添加到三级缓存中，如果A被AOP代理，那么通过这个工厂获取到的就是A代理后的对象，如果A没有被AOP代理，那么这个工厂获取到的就是A实例化的对象。当A进行属性注入时，会去创建B，同时B又依赖了A，所以创建B的同时又会去调用getBean(a)来获取需要的依赖，此时的getBean(a)会从缓存中获取，第一步，先获取到三级缓存中的工厂；第二步，调用对象工工厂的getObject方法来获取到对应的对象，得到这个对象后将其注入到B中。紧接着B会走完它的生命周期流程，包括初始化、后置处理器等。当B创建完后，会将B再注入到A中，此时A再完成它的整个生命周期。至此，循环依赖结束
+解决循环依赖的核心代码：
+```
+/** Cache of singleton objects: bean name --> bean instance */
+private final Map<String, Object> singletonObjects = new ConcurrentHashMap<String, Object>(256);
+ 
+/** Cache of early singleton objects: bean name --> bean instance */
+private final Map<String, Object> earlySingletonObjects = new HashMap<String, Object>(16);
+
+/** Cache of singleton factories: bean name --> ObjectFactory */
+private final Map<String, ObjectFactory<?>> singletonFactories = new HashMap<String, ObjectFactory<?>>(16);
+//以上是三级缓存的定义
+
+protected Object getSingleton(String beanName, boolean allowEarlyReference) {
+  // Spring首先从singletonObjects（一级缓存）中尝试获取
+  Object singletonObject = this.singletonObjects.get(beanName);
+  // 若是获取不到而且对象在建立中，则尝试从earlySingletonObjects(二级缓存)中获取
+  if (singletonObject == null && isSingletonCurrentlyInCreation(beanName)) {
+    synchronized (this.singletonObjects) {
+        singletonObject = this.earlySingletonObjects.get(beanName);
+        if (singletonObject == null && allowEarlyReference) {
+          ObjectFactory<?> singletonFactory = this.singletonFactories.get(beanName);
+          if (singletonFactory != null) {
+            //若是仍是获取不到而且容许从singletonFactories经过getObject获取，则经过singletonFactory.getObject()(三级缓存)获取
+              singletonObject = singletonFactory.getObject();
+              //若是获取到了则将singletonObject放入到earlySingletonObjects,也就是将三级缓存提高到二级缓存中
+              this.earlySingletonObjects.put(beanName, singletonObject);
+              this.singletonFactories.remove(beanName);
+          }
+        }
+    }
+  }
+  return (singletonObject != NULL_OBJECT ? singletonObject : null);
+}
+```
+https://pdai.tech/md/spring/spring-x-framework-ioc-source-3.html
+![](./static/cycleDependence.png)
 
 ## 为什么要使用三级缓存呢？二级缓存能解决循环依赖吗
-如果要使用二级缓存解决循环依赖，意味着所有Bean在实例化后就要完成AOP代理，这样违背了Spring设计的原则，Spring在设计之初就是通过AnnotationAwareAspectJAutoProxyCreator这个后置处理器来在Bean生命周期的最后一步来完成AOP代理，而不是在实例化后就立马进行AOP代理
+需要知道的是，在singletonFactory.getObject()这一步，如果Bean是被代理的(比如AOP代理)，那么返回的是Bean的代理对象，否则返回Bean本身
+
+**二级缓存其实也是能解决循环依赖的**，直接放earlySingletonObject就可以了，那么为什么还要三级缓存呢？因为直接放earlySingletonObject，如果此时bean实现了代理，那么earlySingletonObject就是对应的代理对象，这时候意味着bean在实例化阶段就生成代理对象了。但是spring的设计原则应该是在实例化，属性设置和初始化之后才生成代理对象，这就违背了spring的设计原则。
+如果Bean之间有循环依赖，那么提前代理无法避免，因为此时需要从缓存中获取对应的对象，这时候二级缓存三级缓存差别不大。但是如果没有循环依赖，在没有三级缓存的情况下，bean仍然需要提前代理。也就是说，**三级缓存的作用其实是使没有循环依赖的bean不会被提前代理，而是bean生命周期走完后再代理，最大程度上保证了spring的设计原则**
 
 ## @Resource和@Autowired的区别
-Autowired默认bytype注入，type就是哪个接口，如果存在多个相同的类型，那么会byName(实现类的名字)匹配，如果匹配不到，就会报错
+Autowired默认bytype注入，type就是方法的变量类型，如果存在多个相同的type，那么会byName(实现类的名字)匹配(需要)，如果匹配不到，就会报错
 Resource默认byName注入，如果没有相同名称则会byType进行匹配，如果匹配不到，就会报错。并且Resource是可以指定name和type的，如果使用了name就会byName匹配，如果使用了type就会byType进行匹配
 如果加上@Qualifier("ClassName")，就会默认byName进行匹配，比如
 ```
@@ -1487,6 +1591,45 @@ public class BeanTest {
 ```
 如果是原型模型，那么会返回bean给用户由用户处理。原型模式是指通过深拷贝的方式创建一个重复的对象，这种模式是实现了一个原型接口，该接口用于创建当前对象的克隆。当直接创建对象的代价比较大时，则采用这种模式。
 ## bean会有线程安全问题吗
+todo
+
+## AOP
+### AOP的一些术语
+面向切面编程，目的是把一部分类的共同动作抽象出来，完成对类的解耦。OOP的核心思想是封装，AOP的核心思想是解耦。OOP面向对象编程，针对业务处理过程的实体及其属性和行为进行抽象封装，以获得更加清晰高效的逻辑单元划分。而AOP则是针对业务处理过程中的切面进行提取，它所面对的是处理过程的某个步骤或阶段，以获得逻辑过程的中各部分之间低耦合的隔离效果。
+![](./static/AOP.png)
+AOP的几个术语
+连接点（Jointpoint）：表示需要在程序中插入横切关注点的扩展点，连接点可能是类初始化、方法执行、方法调用、字段调用或处理异常等等，Spring只支持方法执行连接点，在AOP中表示为**在哪里干**；**指单个方法**
+
+切入点（Pointcut）： **选择一组相关连接点的模式，即可以认为连接点的集合**，Spring支持perl5正则表达式和AspectJ切入点模式，Spring默认使用AspectJ语法，在AOP中表示为在哪里干的集合；**其实就是指方法，在切入点切入=在方法中切入**
+
+通知（Advice）：在连接点上执行的行为，通知提供了在AOP中需要在切入点所选择的连接点处进行扩展现有行为的手段；包括前置通知（before advice）、后置通知(after advice)、环绕通知（around advice），在Spring中通过代理模式实现AOP，并通过拦截器模式以环绕连接点的拦截器链织入通知；**在AOP中表示为干什么**；**就是要在方法里切入什么功能，指许多方法的集合**
+
+方面/切面（Aspect）：横切关注点的模块化，比如上边提到的日志组件。可以认为是通知、引入和切入点的组合；在Spring中可以使用Schema和@AspectJ方式进行组织实现；在AOP中表示为在哪干和干什么集合；引入（inter-type declaration）：也称为内部类型声明，为已有的类添加额外新的字段或方法，Spring允许引入新的接口（必须对应一个实现）到所有被代理对象（目标对象）, 在AOP中表示为干什么（引入什么）；**其实就是切入点+通知的集合**
+
+目标对象（Target Object）：需要被织入横切关注点的对象，即该对象是切入点选择的对象，需要被通知的对象，从而也可称为被通知对象；由于Spring AOP 通过代理模式实现，从而这个对象永远是被代理对象，在AOP中表示为对谁干；
+
+织入（Weaving）：把切面连接到其它的应用程序类型或者对象上，并创建一个被通知的对象。这些可以在编译时（例如使用AspectJ编译器），类加载时和运行时完成。Spring和其他纯Java AOP框架一样，在运行时完成织入。**在AOP中表示为怎么实现的**；**怎么实现AOP功能的**
+
+AOP代理（AOP Proxy）：AOP框架使用代理模式创建的对象，从而实现在连接点处插入通知（即应用切面），就是通过代理来对目标对象应用切面。在Spring中，AOP代理可以用JDK动态代理或CGLIB代理实现，而通过拦截器模型应用切面。在AOP中表示为怎么实现的一种典型方式；
+
+### 几个通知类型
+前置通知（Before advice）：在某连接点之前执行的通知，但这个通知不能阻止连接点之前的执行流程（除非它抛出一个异常）。**方法执行前通知**
+
+后置通知（After returning advice）：在某连接点正常完成后执行的通知：例如，一个方法没有抛出任何异常，正常返回。**方法执行完毕后通知**
+
+异常通知（After throwing advice）：在方法抛出异常退出时执行的通知。
+
+最终通知（After (finally) advice）：当某连接点退出的时候执行的通知（不论是正常返回还是异常退出）。
+
+环绕通知（Around Advice）：包围一个连接点的通知，如方法调用。这是最强大的一种通知类型。环绕通知可以在方法调用前后完成自定义的行为。它也会选择是否继续执行连接点或直接返回它自己的返回值或抛出异常来结束执行。**在方法整个执行周期，包括前后的通知**
+
+### 一个AOP的实验
+todo
+
+### 几个AOP的实现方式
+1.基于AspectJ
+2.基于代理模式：详见设计模式中的代理模式章节
+
 # mq
 ## mq消息丢失问题
 mq消息丢失可能存在三种可能，生产者端丢失，mq丢失，消费者取到了消息但还没处理造成的丢失
@@ -1700,6 +1843,35 @@ No，意味着不由Redis控制写回硬盘的时机，转交给操作系统控�
 3.uuid算法
 4.雪花算法
 
+## 负载均衡
+### 不同的负载均衡方向
+客户端负载均衡：
+客户端会自己维护一份服务器地址列表，发送请求前，客户端会根据负载均衡算法选择一台具体的服务器处理请求
+
+服务端负载均衡：
+通常由一层、两层、四层、七层负载均衡
+其中四层和七层最常见，四层工作在传输层，七层工作在应用层
+七层负载均衡常见的两种有：**DNS解析、反向代理**
+**DNS解析指的是**在DNS服务器中为同一个主机域名配置多个IP地址，这些IP地址对应了不同的服务器，用户请求解析域名时，根据轮询的方式返回一个IP地址
+**反向代理**指的是用一个反向代理服务器来处理客户端的请求，由反向代理服务器来选择具体的服务器处理请求并返回给客户端结果。由于反向代理服务器此时是代替服务器进行请求处理，相当于把服务器隐藏了，因此称之为”反向代理“。与之相对的是正向代理，是指代理服务器代替客户端发送请求，此时对于服务端而言客户端被隐藏了，因此被称为正向代理。
+
+### 负载均衡常见的算法
+**1.随机法**
+随机选择一个服务器进行服务，但是可能存在某些服务器空闲时间过久的弊端
+**2.轮询法**
+按照次序依次询问服务器，分为**加权轮询和不加权轮询**，不加权轮询指的是每个服务器都会按照次序逐一被分配请求，适合每个服务器负载能力相同的服务器集群；加权轮询指的是给某些负载能力较强的服务器赋予较大的权重，以使得它们能分配到更多请求
+**3.两次随机法**
+跟随机法类似，只不过是选出两个随机的服务器，从中选择一个
+**4.哈希法**
+通过哈希函数映射到服务器上，弊端是当有服务器变动时哈希结果会变化，造成大规模的数据迁移
+**5.一致性哈希**
+将服务器节点遍布在一个固定的圆盘上，这样就算有服务器变动，受影响的也只有变更服务器的顺时针上的下一个服务。而且可以通过添加虚拟节点的方式使负载更加均衡
+**6.最小连接法**
+选择连接数最少的服务器，但是连接数少不一定代表负载小，可能某些连接负载会很大
+**7.最少活跃法**
+和最小连接法类似，只不过最少连接法选择的是**活动最小连接数**最少的服务器
+**8.最快响应法**
+客户端会维持每个服务器的响应时间，会从中选择一个响应事件最短的服务器
 
 # Seckill秒杀系统
 ## 解决库存超卖问题

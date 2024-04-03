@@ -228,9 +228,26 @@ System.out.println(annotation1.type()); // 打印 int
 
 ## 设计模式
 ### 代理模式
+
+代理是一种设计模式，使用代理对象代替**真实对象**（real object）的访问，在不修改原目标对象的前提下，提供额外的功能操作。主要作用是**扩展目标目标对象的功能**。
+
+感觉也可以叫做**装饰器模式**。
+
 #### 静态代理
-静态代理是通过在工具类中持有目标类实例，并通过工具类调用相关方法来实现在原有业务流程上添加方法
-```
+静态代理是通过在工具类中持有**目标类实例**，并通过工具类调用相关方法来实现在原有业务流程上添加功能
+
+**静态代理步骤**：
+1.定义一个接口及其实现类（target object）（实际上直接继承实现类也是可以的，不一定需要接口类）
+2.创建一个代理类也实现这个接口（通过接口可以实现多态）
+3.将目标对象注入进代理类，然后调用的都是代理类增强过的方法。
+
+**缺点**：
+1.不灵活，每个target类都要手动增强，写代理类
+2.静态代理在编译时就将接口、实现类、代理类变成了一个个class文件
+
+**实践**：
+
+```java
 原有类
 package com.lijie;
 
@@ -251,7 +268,7 @@ public  class Test{
 }
 ```
 如果想要在save之前开启事务，在save之后关闭事务，在不影响原有业务流程的情况下，启用静态代理
-```
+```java
 package com.lijie;
 
 //代理类
@@ -279,10 +296,25 @@ public class Test{
 	}
 }
 ```
+
 #### 动态代理
-静态代理的问题在于每个被代理类都需要编写自己的代理类，会显得代码冗余
-因此采用动态代理的方式，使用反射创建代理对象和调用方法
-```
+静态代理的问题在于**每个被代理类**都需要编写自己的代理类，会显得代码冗余
+因此采用动态代理的方式，使用**反射**创建代理对象和调用方法
+
+在实际开发忠使用动态代理，目的是为了对**多个**方法添加**统一**的逻辑增强，并且不对原来吗做入侵。
+
+SpringAOP 和RPC框架都依赖了动态代理
+
+Java常见额动态代理方式有：**JDK动态代理、CGLIB动态代理**
+
+#### JDK动态代理
+
+jdk动态代理只能代理接口和实现类是因为：`newProxyInstance()`创建的代理类实例必须要用**原始类型接收**（因为代理对象的目标类型是位置的），
+
+但是又继承了`Proxy`，因此只能实现一个接口，通过接口实现多态。（通过查看生成的代理类文件更清晰）
+
+
+```java
 package com.lijie;
 
 //接口
@@ -290,7 +322,8 @@ public interface UserDao {
     void save();
 }
 ```
-```
+
+```java
 package com.lijie;
 
 //接口实现类
@@ -300,8 +333,11 @@ public class UserDaoImpl implements UserDao {
 	}
 }
 ```
+
+----
+通过在invocationHandler中的invoke中写增强方法，相当于可以用于**多个不同类型的target**，而如果是静态代理则需要手动写多个不同target的代理对象。（相当于自动生成了代理对象那个）
 代理接口：
-```
+```java
 package com.lijie;
 
 import java.lang.reflect.InvocationHandler;
@@ -328,8 +364,9 @@ public class InvocationHandlerImpl implements InvocationHandler {
     }
 }
 ```
+
 使用动态代理调用方法：
-```
+```java
 package com.lijie;
 
 import java.lang.reflect.Proxy;
@@ -350,14 +387,24 @@ public class Test {
     }
 }
 ```
-在此例中，通过InvocationHandlerImpl实现了一个UserDaoImpl的接口处理对象，UserDaoImpl是UserDao的实现类，之后通过Proxy.newProxyInstance生成一个代理实例newProxyInstance，在调用newProxyInstance.save()的时候，实际上会调用 InvocationHandlerImpl 中的 invoke() 方法来处理 save() 方法的调用。实际上是通过反射调用了UserDaoImpl的save方法
-动态代理是面向接口的，必须有接口的实现类
-#### CGLIB动态代理
-CGLIB动态代理原理：
-利用asm开源包，对代理对象类的class文件加载进来，通过修改其字节码生成子类来处理。
+在此例中，通过InvocationHandlerImpl实现了一个UserDaoImpl的接口处理对象（UserDaoImpl是UserDao的实现类）
 
-CGLIB动态代理和jdk代理一样，使用反射完成代理，不同的是他可以直接代理类（jdk动态代理不行，他必须目标业务类必须实现接口），CGLIB动态代理底层使用字节码技术，CGLIB动态代理不能对 final类进行继承。（CGLIB动态代理需要导入jar包）
-```
+之后通过Proxy.newProxyInstance生成一个代理实例newProxyInstance，在调用newProxyInstance.save()的时候，实际上会调用 InvocationHandlerImpl 中的 invoke() 方法来处理 save() 方法的调用。实际上是通过反射调用了UserDaoImpl的save方法
+
+动态代理是**面向接口**的，必须有接口的实现类（错）
+也可以直接代理接口
+
+
+#### CGLIB动态代理
+
+CGLIB动态代理原理：
+
+利用asm开源包，对代理对象类的class文件加载进来，通过修改其字节码生成子类来处理。（没有继承Proxy类这一部分，然后改成了继承target类，其他和jdk动态代理比较类似）
+
+
+CGLIB动态代理和jdk代理一样，使用反射完成代理，不同的是他可**以直接代理类**（jdk动态代理不行，他必须目标业务类必须实现接口），CGLIB动态代理底层使用字节码技术，CGLIB动态代理不能对 **final类进行继承**。（CGLIB动态代理需要导入jar包）
+
+```java
 package com.lijie;
 import org.springframework.cglib.proxy.Enhancer;
 import org.springframework.cglib.proxy.MethodInterceptor;
@@ -376,8 +423,10 @@ public class UserDaoImpl implements UserDao {
 		System.out.println("保存数据方法");
 	}
 }
-
-
+```
+-----
+实现`MethodInterceptor`接口，其作用和`InvocationHandler`类似
+```java
 public class CglibProxy implements MethodInterceptor {
 	private Object targetObject;
 	// 这里的目标类型为Object，则可以接受任意一种参数作为被代理类，实现了动态代理

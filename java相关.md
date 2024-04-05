@@ -23,6 +23,13 @@ override
 }
 ```
 # 反射
+## 使用反射的一些例子
+
+1.Spring/Springboot等框架大量使用动态代理，**动态代理依赖于反射机制**。
+
+2.注解也使用了反射
+
+
 ## 获取Class类实例的几个方式：
 1.若已知具体的类，则通过该类的class属性获取
 ```
@@ -38,6 +45,91 @@ Class cla = Class.forName("com.company.Person");
 ```
 4.通过类加载器获取
 5.内置类型的包装类（Integer等）可以直接使用类名.Type
+
+## 反射使用实践
+1.创建需要反射的类
+```java
+package com.cytus.learnspb.exercises;
+
+/*
+* 反射需要使用的目标类
+* */
+public class TargetObject {
+    private String value;
+    public TargetObject()
+    {
+        value = "反射目标类";
+    }
+    public void publicMethod(String s)
+    {
+        System.out.println("one public method:"+s);
+    }
+    private void privateMethod(String s) {
+        System.out.println("one private method:" + s);
+    }
+}
+
+```
+2.反射使用该类
+```java
+package com.cytus.learnspb.exercises;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
+/*
+* 练习反射
+* */
+public class InvocationLearn {
+    // 使用反射操作TargetObject的方法和参数
+
+    public static void main(String[] args) throws ClassNotFoundException, NoSuchMethodException, InstantiationException, IllegalAccessException, InvocationTargetException, NoSuchFieldException {
+        /*
+        * 1.获取TargetObject类的class对象，再为对象创建TargetObject实例
+        * 这里理解为:获取对象实际上获取的是TargetObject这个类的元信息对象(即Class的对象class)
+        * 然后通过元对象(class)的newInstance()方法创建TargetObject的实例
+        * */
+        // 通过类名的全路径加载，四种获得class对象的方式？
+        Class<?> targetClass = Class.forName("com.cytus.learnspb.exercises.TargetObject");
+        TargetObject targetObject = (TargetObject) targetClass.newInstance();
+
+        /*
+        * 获取TargetObject中的所有方法
+        * */
+        Method[] methods = targetClass.getDeclaredMethods();
+        // 打印所有方法名查看
+        for(Method method:methods)
+        {
+            System.out.println(method.getName());
+        }
+
+        /*
+        * 获取指定方法并调用
+        * 寻找方法时当然需要方法名和参数类型
+        * */
+        Method publicMethod = targetClass.getDeclaredMethod("publicMethod", String.class);
+        // invoke()调用方法，传入对象和方法的参数
+        publicMethod.invoke(targetObject,"反射调用方法"); // 用invoke调用对象的方法(为什么不能直接调用呢？)
+
+        /*
+        * 获取类中的指定参数并进行修改, Declared开头会获取所有，否则就只有公共的
+        * */
+        Field field = targetClass.getDeclaredField("value");
+        field.setAccessible(true); // 设置可访问权限
+        field.set(targetObject, "JavaGuide"); // 传入对象和值作为参数
+
+        /*
+        * 获得private参数并调用，多了setAccessible而已
+        * */
+        Method privateMethod = targetClass.getDeclaredMethod("privateMethod", String.class);
+        // invoke()调用方法，传入对象和方法的参数
+        privateMethod.setAccessible(true);
+        privateMethod.invoke(targetObject,"反射调用私有方法"); // 用invoke调用对象的方法(为什么不能直接调用呢？)
+    }
+}
+
+```
 ## 类的加载与初始化
 加载：将class文件字节码内容加载到内存中，并将这些静态数据转换成方法区的运行时数据结构，然后**生成一个代表这个类的java.lang.Class对象**
 
@@ -258,13 +350,78 @@ public class Test {
     }
 }
 ```
-在此例中，通过InvocationHandlerImpl实现了一个UserDaoImpl的接口处理对象，UserDaoImpl是UserDao的实现类，之后通过Proxy.newProxyInstance生成一个代理实例newProxyInstance，在调用newProxyInstance.save()的时候，实际上会调用 InvocationHandlerImpl 中的 invoke() 方法来处理 save() 方法的调用。实际上是通过反射调用了UserDaoImpl的save方法
-动态代理是面向接口的，必须有接口的实现类
+在此例中，通过InvocationHandlerImpl实现了一个UserDaoImpl的接口处理对象，UserDaoImpl是UserDao的实现类，之后通过Proxy.newProxyInstance生成一个代理类newProxyInstance，在调用newProxyInstance.save()的时候，实际上会调用 InvocationHandlerImpl 中的 invoke() 方法来处理 save() 方法的调用。实际上是通过反射调用了UserDaoImpl的save方法
+动态代理是面向接口的，必须有接口的实现类。因为Proxy会生成一个UserDao的代理类，这个类继承了Proxy，而java是单继承的，所以只能通过实现接口的方式。实现接口的目的是为了持有接口/类的方法，用于重写
+```
+public final class $Proxy0 extends Proxy implements UserService { //$Proxy0是生成的代理类
+    private static Method m1;
+    private static Method m3;
+    private static Method m2;
+    private static Method m0;
+
+    public $Proxy0(InvocationHandler var1) throws  {
+        super(var1);
+    }
+
+    public final boolean equals(Object var1) throws  {
+        try {
+            return (Boolean)super.h.invoke(this, m1, new Object[]{var1});
+        } catch (RuntimeException | Error var3) {
+            throw var3;
+        } catch (Throwable var4) {
+            throw new UndeclaredThrowableException(var4);
+        }
+    }
+
+    public final int sava() throws  { //重写的方法
+        try {
+            return (Integer)super.h.invoke(this, m3, (Object[])null); //$proxy0继承了Proxy，super.h也即实现增强功能的InnovationHandler，调用了其invoke方法
+        } catch (RuntimeException | Error var2) {
+            throw var2;
+        } catch (Throwable var3) {
+            throw new UndeclaredThrowableException(var3);
+        }
+    }
+
+    public final String toString() throws  {
+        try {
+            return (String)super.h.invoke(this, m2, (Object[])null);
+        } catch (RuntimeException | Error var2) {
+            throw var2;
+        } catch (Throwable var3) {
+            throw new UndeclaredThrowableException(var3);
+        }
+    }
+
+    public final int hashCode() throws  {
+        try {
+            return (Integer)super.h.invoke(this, m0, (Object[])null);
+        } catch (RuntimeException | Error var2) {
+            throw var2;
+        } catch (Throwable var3) {
+            throw new UndeclaredThrowableException(var3);
+        }
+    }
+
+    static {
+        try {
+            m1 = Class.forName("java.lang.Object").getMethod("equals", Class.forName("java.lang.Object"));
+            m3 = Class.forName("com.tiantang.study.UserService").getMethod("sava");
+            m2 = Class.forName("java.lang.Object").getMethod("toString");
+            m0 = Class.forName("java.lang.Object").getMethod("hashCode");
+        } catch (NoSuchMethodException var2) {
+            throw new NoSuchMethodError(var2.getMessage());
+        } catch (ClassNotFoundException var3) {
+            throw new NoClassDefFoundError(var3.getMessage());
+        }
+    }
+}
+```
 #### CGLIB动态代理
 CGLIB动态代理原理：
 利用asm开源包，对代理对象类的class文件加载进来，通过修改其字节码生成子类来处理。
 
-CGLIB动态代理和jdk代理一样，使用反射完成代理，不同的是他可以直接代理类（jdk动态代理不行，他必须目标业务类必须实现接口），CGLIB动态代理底层使用字节码技术，CGLIB动态代理不能对 final类进行继承。（CGLIB动态代理需要导入jar包）
+CGLIB动态代理和jdk代理一样，使用反射完成代理，不同的是他可以直接代理类（jdk动态代理不行，他要求目标业务类必须实现接口），CGLIB动态代理底层使用字节码技术，CGLIB动态代理不能对 final类进行继承。（CGLIB动态代理需要导入jar包）
 ```
 package com.lijie;
 import org.springframework.cglib.proxy.Enhancer;
@@ -399,8 +556,23 @@ class Singleton01{
         instance = new Singleton01();
         return instance;
     }
-}
+}//这种在多线程情况下是不行的
+PS:在执行instance = new Singleton01();的时候内存发生的变化：
+1.为Singleton01对象在堆上分配内存空间
+2.执行Singleton01的构造函数，如果此时还未进行类加载，会先进行类的加载
+3.将instance指向新创建的对象
 
+
+class Singleton03{
+    private Singleton03(){}
+    private static Singleton03 instance = new Singleton03();
+
+    public Singleton03 getInstance(){
+        return instance;
+    }
+}//饿汉式，会预先创建一个实例。但是这种方式可能会造成浪费，因为只要类加载了就会产生实例化对象
+
+//以下三种都是懒汉式
 class Singleton02{
     private Singleton02 instance;
     private Singleton02(){}
@@ -412,34 +584,34 @@ class Singleton02{
         instance = new Singleton02();
         return instance;
     }
-}
+}//在高并发的情况下会导致性能降低
 
-class Singleton03{
-    private Singleton03(){}
+class Singleton05{
+    private Singleton05 instance;
+    private Singleton05(){}
 
-    class instanceHolder{
-        private static Singleton03 instance = new Singleton03();
-    }
-    public Singleton03 getInstance(){
-        return instanceHolder.instance;
-    }
-}
-
-class Singleton04{
-    private Singleton04 instance;
-    private Singleton04(){}
-
-    public Singleton04 getInstance(){
+    public Singleton05 getInstance(){
         if(null != instance){
             return instance;
         }
-        synchronized (Singleton04.class){
+        synchronized (Singleton05.class){
             if(null != instance){
                 return instance;
             }
-            instance = new Singleton04();
+            instance = new Singleton05();
             return instance;
         }
+    }
+}
+通过内部类持有实例的形式，避免了只要Sington04类加载后就会产生实例化对象，因为只有调用内部类方法的时候内部类才会进行加载和初始化，这时才会产生一个实例化对象
+class Singleton04{
+    private Singleton04(){}
+
+    class instanceHolder{
+        private static Singleton04 instance = new Singleton04();
+    }
+    public Singleton04 getInstance(){
+        return instanceHolder.instance;
     }
 }
 ```
@@ -637,8 +809,26 @@ volatile 关键字用于修饰变量时，能够保证该变量的可见性和�
 写内存屏障（Store Barrier / Write Barrier）： 当线程写入 volatile 变量时，JMM 会在写操作前插入 StoreStore 屏障，确保在这次写操作之前的所有普通写操作都已完成。接着在写操作后插入 StoreLoad 屏障，强制所有后来的读写操作都在此次写操作完成之后执行，这就确保了其他线程能立即看到 volatile 变量的最新值。
 读内存屏障（Load Barrier / Read Barrier）： 当线程读取 volatile 变量时，JMM 会在读操作前插入 LoadLoad 屏障，确保在此次读操作之前的所有读操作都已完成。而在读操作后插入 LoadStore 屏障，防止在此次读操作之后的写操作被重排序到读操作之前，这样就确保了对 volatile 变量的读取总是能看到之前对同一变量或其他相关变量的写入结果。
 
+其中，**在写操作之后加入写屏障，可以保证存储队列里的消息全部被写入到对方cpu的失效队列中，读操作之前加入读屏障，可以保证失效队列中的消息都被消费完**，详见OS-MESI协议部分
+
 关于可见性，volatile 内存可见性主要通过 lock 前缀指令实现的，它会锁定当前内存区域的缓存（缓存行），并且立即将当前缓存行数据写入主内存（耗时非常短），回写主内存的时候会通过 MESI 协议使其他线程缓存了该变量的地址失效，从而导致其他线程需要重新去主内存中重新读取数据到其工作线程中。
 
+#### 内存屏障
+锁定（lock）: 作用于主内存中的变量，将他标记为一个线程独享变量。
+
+解锁（unlock）: 作用于主内存中的变量，解除变量的锁定状态，被解除锁定状态的变量才能被其他线程锁定。
+
+read（读取）：作用于主内存的变量，它把一个变量的值从主内存传输到线程的工作内存中，以便随后的 load 动作使用。
+
+load(载入)：把 read 操作从主内存中得到的变量值放入工作内存的变量的副本中。
+
+use(使用)：把工作内存中的一个变量的值传给执行引擎，每当虚拟机遇到一个使用到变量的指令时都会使用该指令。
+
+assign（赋值）：作用于工作内存的变量，它把一个从执行引擎接收到的值赋给工作内存的变量，每当虚拟机遇到一个给变量赋值的字节码指令时执行这个操作。
+
+store（存储）：作用于工作内存的变量，它把工作内存中一个变量的值传送到主内存中，以便随后的 write 操作使用。
+
+write（写入）：作用于主内存的变量，它把 store 操作从工作内存中得到的变量的值放入主内存的变量中。
 
 ### 乐观锁
 乐观锁：每次假设最好的情况，线程可以不停的执行，无需加锁也无需等待。具体的实现方法有CAS算法和版本号算法，CAS算法会有一个要更新的值V,预期值E,拟写入的新值N，只有当V==E时才会写入新值，否则放弃更新，因为V != E时说明有其他线程修改过了，因此不应该再执行更新。但是仍然存在ABA问题，并且CAS的自旋操作也会给cpu带来负担。ABA的解决方法有加版本号或者时间戳
@@ -677,9 +867,11 @@ jdk1.6以后，synchronized有四种状态：
 3.轻量级锁，当多个进程对共享资源竞争时，JVM会先尝试用轻量级锁，会先尝试用CAS的方式获取锁，如果能够获取那么此时状态为轻量级锁，**如果CAS失败太多次（自旋），那么会升级为重量级锁**
 
 4.重量级锁，当资源已经被线程占有，此时为偏向锁或者轻量级锁状态，此时再有其他进程来竞争，那么会升级为重量级锁，**重量级锁由操作系统实现，开销比较高**
+
 ### ReentrantLock
 ReentrantLock：与synchronized类似，也是一个可重入且独占的锁，只不过它实现公平锁（先来的进程先获得锁），而synchronized只有非公平锁；它可以实现中断等待锁，使得等待锁的进程可以放弃等待去做其他事情，这个是通过lock.lockInterruptibly来实现；它可以用Condition接口和newCondition()方法来实现选择性通知
-
+ReentrantLock实现可重入的原理与AQS有关（ReentrantLock本来就是基于AQS的同步器），
+ReentrantLock的内部维护了一个 state 变量，用来表示锁的占用状态。state 的初始值为 0，表示锁处于未锁定状态。当线程 A 调用 lock() 方法时，会尝试通过 tryAcquire() 方法独占该锁，并让 state 的值加 1。如果成功了，那么线程 A 就获取到了锁。如果失败了，那么线程 A 就会被加入到一个等待队列（CLH 队列）中，直到其他线程释放该锁。假设线程 A 获取锁成功了，**释放锁之前，A 线程自己是可以重复获取此锁的（state 会累加）**。这就是可重入性的体现：一个线程可以多次获取同一个锁而不会被阻塞。但是，这也意味着，一个线程必须释放与获取的次数相同的锁，才能让 state 的值回到 0，也就是让锁恢复到未锁定状态。
 ### synchronized 和 volatile区别
 volatile 关键字是线程同步的轻量级实现，所以 volatile性能肯定比synchronized关键字要好 。但是 volatile 关键字只能用于变量而 synchronized 关键字可以修饰方法以及代码块 。
 volatile 关键字能保证数据的可见性，但不能保证数据的原子性。synchronized 关键字两者都能保证。
@@ -762,7 +954,14 @@ LinkedBlockingQueue和DalayWorkQueue可能会因为请求过多而OOM
 Future类是异步思想的应用。当一个任务太耗时时，可以启动一个子线程去完成，等事情干完之后再通过Future 类获取到耗时任务的执行结果。
 ### AQS
 AQS是什么：AQS 核心思想是，如果被请求的共享资源空闲，则将当前请求资源的线程设置为有效的工作线程，并且将共享资源设置为锁定状态。如果被请求的共享资源被占用，那么就需要一套线程阻塞等待以及被唤醒时锁分配的机制，这个机制 AQS 是用 CLH 队列锁 实现的，即将暂时获取不到锁的线程加入到队列中。AQS的队列指的是一个等待的概念，并不是真的有一个队列
+CLH 锁是对自旋锁的一种改进，是一个虚拟的双向队列。
 ![](./static/AQS.png)
+**为什么是虚拟的？虚拟的什么意思**
+https://mp.weixin.qq.com/s/jEx-4XhNGOFdCo4Nou5tqg
+CLH 锁是一个链表队列，为什么 Node 节点没有指向前驱或后继指针呢？
+CLH 锁是一种隐式的链表队列，没有显式的维护前驱或后继指针。因为每个等待获取锁的线程只需要**轮询前一个节点的状态**就够了，而不需要遍历整个队列。在这种情况下，只需要使用一个局部变量保存前驱节点，而不需要显式的维护前驱或后继指针。
+
+基于AQS实现的同步器有：ReentrantLock，Semaphora，CountDownLatch，CyclicBarrier
 AQS是通过int变量成员State表示状态的，它被volatile修饰，对所有线程可见
 对于独占锁，以ReentrantLock为例，state为0表示资源未被占用，当线程lock（）时，会使state+1，其他线程就无法获取而阻塞，当线程执行完毕后，则将state-1，其他线程才有机会得到锁
 再以 CountDownLatch 以例，任务分为 N 个子线程去执行，state 也初始化为 N（注意 N 要与线程个数一致）。这 N 个子线程是并行执行的，每个子线程执行完后countDown() 一次，state 会 CAS(Compare and Swap) 减 1。等到所有子线程都执行完后(即 state=0 )，会 unpark() 主调用线程，然后主调用线程就会从 await() 函数返回，继续后余动作。
@@ -818,6 +1017,10 @@ public CyclicBarrier(int parties, Runnable barrierAction) {
     this.barrierCommand = barrierAction;
 }
 ```
+CountDownLatch的应用场景主要是一个线程需要等待其他线程完成某些步骤才可以继续执行，主要体现在**等待**，这里是**一个等多个**
+CyclicBarrier的应用场景主要是多个线程到达某一阶段后需要等待其他线程也执行到特定步骤后才能继续执行，主要体现在**同步**，这里是**线程互相等待，先到的等后到的**。
+CountDownLatch和CyclicBarrier的state都是依照预先定好的数值，每到一个线程则递减。
+CountDownLatch是通过CountDownLatch.countDown()递减，CyclicBarrier是通过CyclicBarrier.await()递减，等到减为0以后才可以继续往下执行。
 ### 让线程有返回值的方法
 使用callable代替runnable，callable的call方法有返回值且可以被异常捕获
 ### 让线程顺序执行的方法
@@ -1273,12 +1476,51 @@ LogService开启的事务是NESTED，那么LogService也会**开启一个新事�
 REQUIRED_NEW的应用场景是需要进行某些独立的操作，而NESTED的应用场景是需要进行某些子操作
 ## Spring是如何解决的循环依赖
 Spring通过三级缓存解决了循环依赖，其中一级缓存为单例池（singletonObjects）,二级缓存为早期曝光对象earlySingletonObjects，三级缓存为早期曝光对象工厂（singletonFactories）。当A、B两个类发生循环引用时，在A完成实例化后，就使用实例化后的对象去创建一个对象工厂，并添加到三级缓存中，如果A被AOP代理，那么通过这个工厂获取到的就是A代理后的对象，如果A没有被AOP代理，那么这个工厂获取到的就是A实例化的对象。当A进行属性注入时，会去创建B，同时B又依赖了A，所以创建B的同时又会去调用getBean(a)来获取需要的依赖，此时的getBean(a)会从缓存中获取，第一步，先获取到三级缓存中的工厂；第二步，调用对象工工厂的getObject方法来获取到对应的对象，得到这个对象后将其注入到B中。紧接着B会走完它的生命周期流程，包括初始化、后置处理器等。当B创建完后，会将B再注入到A中，此时A再完成它的整个生命周期。至此，循环依赖结束
+解决循环依赖的核心代码：
+```
+/** Cache of singleton objects: bean name --> bean instance */
+private final Map<String, Object> singletonObjects = new ConcurrentHashMap<String, Object>(256);
+ 
+/** Cache of early singleton objects: bean name --> bean instance */
+private final Map<String, Object> earlySingletonObjects = new HashMap<String, Object>(16);
+
+/** Cache of singleton factories: bean name --> ObjectFactory */
+private final Map<String, ObjectFactory<?>> singletonFactories = new HashMap<String, ObjectFactory<?>>(16);
+//以上是三级缓存的定义
+
+protected Object getSingleton(String beanName, boolean allowEarlyReference) {
+  // Spring首先从singletonObjects（一级缓存）中尝试获取
+  Object singletonObject = this.singletonObjects.get(beanName);
+  // 若是获取不到而且对象在建立中，则尝试从earlySingletonObjects(二级缓存)中获取
+  if (singletonObject == null && isSingletonCurrentlyInCreation(beanName)) {
+    synchronized (this.singletonObjects) {
+        singletonObject = this.earlySingletonObjects.get(beanName);
+        if (singletonObject == null && allowEarlyReference) {
+          ObjectFactory<?> singletonFactory = this.singletonFactories.get(beanName);
+          if (singletonFactory != null) {
+            //若是仍是获取不到而且容许从singletonFactories经过getObject获取，则经过singletonFactory.getObject()(三级缓存)获取
+              singletonObject = singletonFactory.getObject();
+              //若是获取到了则将singletonObject放入到earlySingletonObjects,也就是将三级缓存提高到二级缓存中
+              this.earlySingletonObjects.put(beanName, singletonObject);
+              this.singletonFactories.remove(beanName);
+          }
+        }
+    }
+  }
+  return (singletonObject != NULL_OBJECT ? singletonObject : null);
+}
+```
+https://pdai.tech/md/spring/spring-x-framework-ioc-source-3.html
+![](./static/cycleDependence.png)
 
 ## 为什么要使用三级缓存呢？二级缓存能解决循环依赖吗
-如果要使用二级缓存解决循环依赖，意味着所有Bean在实例化后就要完成AOP代理，这样违背了Spring设计的原则，Spring在设计之初就是通过AnnotationAwareAspectJAutoProxyCreator这个后置处理器来在Bean生命周期的最后一步来完成AOP代理，而不是在实例化后就立马进行AOP代理
+需要知道的是，在singletonFactory.getObject()这一步，如果Bean是被代理的(比如AOP代理)，那么返回的是Bean的代理对象，否则返回Bean本身
+
+**二级缓存其实也是能解决循环依赖的**，直接放earlySingletonObject就可以了，那么为什么还要三级缓存呢？因为直接放earlySingletonObject，如果此时bean实现了代理，那么earlySingletonObject就是对应的代理对象，这时候意味着bean在实例化阶段就生成代理对象了。但是spring的设计原则应该是在实例化，属性设置和初始化之后才生成代理对象，这就违背了spring的设计原则。
+如果Bean之间有循环依赖，那么提前代理无法避免，因为此时需要从缓存中获取对应的对象，这时候二级缓存三级缓存差别不大。但是如果没有循环依赖，在没有三级缓存的情况下，bean仍然需要提前代理。也就是说，**三级缓存的作用其实是使没有循环依赖的bean不会被提前代理，而是bean生命周期走完后再代理，最大程度上保证了spring的设计原则**
 
 ## @Resource和@Autowired的区别
-Autowired默认bytype注入，type就是哪个接口，如果存在多个相同的类型，那么会byName(实现类的名字)匹配，如果匹配不到，就会报错
+Autowired默认bytype注入，type就是方法的变量类型，如果存在多个相同的type，那么会byName(实现类的名字)匹配(需要)，如果匹配不到，就会报错
 Resource默认byName注入，如果没有相同名称则会byType进行匹配，如果匹配不到，就会报错。并且Resource是可以指定name和type的，如果使用了name就会byName匹配，如果使用了type就会byType进行匹配
 如果加上@Qualifier("ClassName")，就会默认byName进行匹配，比如
 ```
@@ -1360,6 +1602,45 @@ public class BeanTest {
 ```
 如果是原型模型，那么会返回bean给用户由用户处理。原型模式是指通过深拷贝的方式创建一个重复的对象，这种模式是实现了一个原型接口，该接口用于创建当前对象的克隆。当直接创建对象的代价比较大时，则采用这种模式。
 ## bean会有线程安全问题吗
+todo
+
+## AOP
+### AOP的一些术语
+面向切面编程，目的是把一部分类的共同动作抽象出来，完成对类的解耦。OOP的核心思想是封装，AOP的核心思想是解耦。OOP面向对象编程，针对业务处理过程的实体及其属性和行为进行抽象封装，以获得更加清晰高效的逻辑单元划分。而AOP则是针对业务处理过程中的切面进行提取，它所面对的是处理过程的某个步骤或阶段，以获得逻辑过程的中各部分之间低耦合的隔离效果。
+![](./static/AOP.png)
+AOP的几个术语
+连接点（Jointpoint）：表示需要在程序中插入横切关注点的扩展点，连接点可能是类初始化、方法执行、方法调用、字段调用或处理异常等等，Spring只支持方法执行连接点，在AOP中表示为**在哪里干**；**指单个方法**
+
+切入点（Pointcut）： **选择一组相关连接点的模式，即可以认为连接点的集合**，Spring支持perl5正则表达式和AspectJ切入点模式，Spring默认使用AspectJ语法，在AOP中表示为在哪里干的集合；**其实就是指方法，在切入点切入=在方法中切入**
+
+通知（Advice）：在连接点上执行的行为，通知提供了在AOP中需要在切入点所选择的连接点处进行扩展现有行为的手段；包括前置通知（before advice）、后置通知(after advice)、环绕通知（around advice），在Spring中通过代理模式实现AOP，并通过拦截器模式以环绕连接点的拦截器链织入通知；**在AOP中表示为干什么**；**就是要在方法里切入什么功能，指许多方法的集合**
+
+方面/切面（Aspect）：横切关注点的模块化，比如上边提到的日志组件。可以认为是通知、引入和切入点的组合；在Spring中可以使用Schema和@AspectJ方式进行组织实现；在AOP中表示为在哪干和干什么集合；引入（inter-type declaration）：也称为内部类型声明，为已有的类添加额外新的字段或方法，Spring允许引入新的接口（必须对应一个实现）到所有被代理对象（目标对象）, 在AOP中表示为干什么（引入什么）；**其实就是切入点+通知的集合**
+
+目标对象（Target Object）：需要被织入横切关注点的对象，即该对象是切入点选择的对象，需要被通知的对象，从而也可称为被通知对象；由于Spring AOP 通过代理模式实现，从而这个对象永远是被代理对象，在AOP中表示为对谁干；
+
+织入（Weaving）：把切面连接到其它的应用程序类型或者对象上，并创建一个被通知的对象。这些可以在编译时（例如使用AspectJ编译器），类加载时和运行时完成。Spring和其他纯Java AOP框架一样，在运行时完成织入。**在AOP中表示为怎么实现的**；**怎么实现AOP功能的**
+
+AOP代理（AOP Proxy）：AOP框架使用代理模式创建的对象，从而实现在连接点处插入通知（即应用切面），就是通过代理来对目标对象应用切面。在Spring中，AOP代理可以用JDK动态代理或CGLIB代理实现，而通过拦截器模型应用切面。在AOP中表示为怎么实现的一种典型方式；
+
+### 几个通知类型
+前置通知（Before advice）：在某连接点之前执行的通知，但这个通知不能阻止连接点之前的执行流程（除非它抛出一个异常）。**方法执行前通知**
+
+后置通知（After returning advice）：在某连接点正常完成后执行的通知：例如，一个方法没有抛出任何异常，正常返回。**方法执行完毕后通知**
+
+异常通知（After throwing advice）：在方法抛出异常退出时执行的通知。
+
+最终通知（After (finally) advice）：当某连接点退出的时候执行的通知（不论是正常返回还是异常退出）。
+
+环绕通知（Around Advice）：包围一个连接点的通知，如方法调用。这是最强大的一种通知类型。环绕通知可以在方法调用前后完成自定义的行为。它也会选择是否继续执行连接点或直接返回它自己的返回值或抛出异常来结束执行。**在方法整个执行周期，包括前后的通知**
+
+### 一个AOP的实验
+todo
+
+### 几个AOP的实现方式
+1.基于AspectJ
+2.基于代理模式：详见设计模式中的代理模式章节
+
 # mq
 ## mq消息丢失问题
 mq消息丢失可能存在三种可能，生产者端丢失，mq丢失，消费者取到了消息但还没处理造成的丢失
@@ -1573,6 +1854,35 @@ No，意味着不由Redis控制写回硬盘的时机，转交给操作系统控�
 3.uuid算法
 4.雪花算法
 
+## 负载均衡
+### 不同的负载均衡方向
+客户端负载均衡：
+客户端会自己维护一份服务器地址列表，发送请求前，客户端会根据负载均衡算法选择一台具体的服务器处理请求
+
+服务端负载均衡：
+通常由一层、两层、四层、七层负载均衡
+其中四层和七层最常见，四层工作在传输层，七层工作在应用层
+七层负载均衡常见的两种有：**DNS解析、反向代理**
+**DNS解析指的是**在DNS服务器中为同一个主机域名配置多个IP地址，这些IP地址对应了不同的服务器，用户请求解析域名时，根据轮询的方式返回一个IP地址
+**反向代理**指的是用一个反向代理服务器来处理客户端的请求，由反向代理服务器来选择具体的服务器处理请求并返回给客户端结果。由于反向代理服务器此时是代替服务器进行请求处理，相当于把服务器隐藏了，因此称之为”反向代理“。与之相对的是正向代理，是指代理服务器代替客户端发送请求，此时对于服务端而言客户端被隐藏了，因此被称为正向代理。
+
+### 负载均衡常见的算法
+**1.随机法**
+随机选择一个服务器进行服务，但是可能存在某些服务器空闲时间过久的弊端
+**2.轮询法**
+按照次序依次询问服务器，分为**加权轮询和不加权轮询**，不加权轮询指的是每个服务器都会按照次序逐一被分配请求，适合每个服务器负载能力相同的服务器集群；加权轮询指的是给某些负载能力较强的服务器赋予较大的权重，以使得它们能分配到更多请求
+**3.两次随机法**
+跟随机法类似，只不过是选出两个随机的服务器，从中选择一个
+**4.哈希法**
+通过哈希函数映射到服务器上，弊端是当有服务器变动时哈希结果会变化，造成大规模的数据迁移
+**5.一致性哈希**
+将服务器节点遍布在一个固定的圆盘上，这样就算有服务器变动，受影响的也只有变更服务器的顺时针上的下一个服务。而且可以通过添加虚拟节点的方式使负载更加均衡
+**6.最小连接法**
+选择连接数最少的服务器，但是连接数少不一定代表负载小，可能某些连接负载会很大
+**7.最少活跃法**
+和最小连接法类似，只不过最少连接法选择的是**活动最小连接数**最少的服务器
+**8.最快响应法**
+客户端会维持每个服务器的响应时间，会从中选择一个响应事件最短的服务器
 
 # Seckill秒杀系统
 ## 解决库存超卖问题
@@ -1592,7 +1902,8 @@ if (!seckillGoodsResult) {
 
 ## 减少sql访问
 1.通过redis库存预减减少对mysql的访问
-redis库存预减必须实现原子性，不然会失效(如果没有原子性，可能存在很多线程读取到符合要求的stock值，这时候还是会有很多线程会访问数据库。但是原子性保证了线程可以在最短的时间内改变redis里库存的值，不至于因为其他因为导致迟迟不能修改库存的值使得后续线程读到符合要求的库存值)，通过lua脚本实现读库存和写库存的原子性
+redis库存预减必须实现原子性，不然可能会导致redis缓存中的库存发生超卖的现象，超卖的订单还是会走数据库，加大数据库压力。这里是通过redis+Lua脚本实现的
+为什么Lua可以实现防止redis缓存中的库存发生超卖：如果有很多个请求同时执行 Lua 脚本，Redis 会依次执行这些请求，确保每个 Lua 脚本的原子性。**当一个 Lua 脚本执行完毕后，才会去执行下一个 Lua 脚本**，这样可以保证每个 Lua 脚本的操作都是原子的，不会被其他请求打断。由于每一个秒杀请求读取库存和扣减库存都是在Lua脚本里执行的，因此不会出现多个请求读取到同一个库存数然后递减导致的库存超卖问题
 
 2.通过内存标记减少对redis的访问
 
@@ -1601,6 +1912,10 @@ redis库存预减必须实现原子性，不然会失效(如果没有原子性�
 1.通过读取缓存订单
 2.对秒杀订单简历id+商品id的唯一索引，在生成订单前开启事务，如果存在相同索引订单会抛出异常，造成事务的回滚
 
+## 如何解决少卖问题
+当同一个用户重复下单，当还没有生成订单的时候，每一次下单Redis库存就会减少一个，那么当mysql中订单重复的时，mysql会回滚，但是redis已经扣减的库存不会回滚，后面的请求订单因为redis中库存不足也无法成功下单，就造成了mysql中的库存会卖不完，造成少卖现象。这种情况可以将redis中的库存多设置一点，比如说库存有10个，那么redis里面的库存可以设置为20个，一定程度上可以减少少买现象的发生
+
+https://www.cnblogs.com/xiangkejin/p/9351501.html 关于秒杀优化总结的一篇博文
 # Linux
 查看cpu使用率：1.top   2.cat /proc/loadavg
 
@@ -1678,3 +1993,36 @@ Selector 是基于事件驱动的 I/O 多路复用模型(**也就是前面说的
 僵尸进程：一个进程使用fork创建子进程，**子进程退出**，但是父进程并没有调用wait或waitpid获取子进程的状态信息，那么子进程的进程描述符仍然保存在系统中（会占用进程号之类，还有占用的内存）
 
 孤儿进程：**一个父进程退出**，但它的一个或多个子进程还在运行，那么这些子进程将成为孤儿进程。孤儿进程将被init进程(进程号为1)所收养，并由init进程对它们完成状态收集工作。
+## MESI协议和内存屏障
+MESI缓存一致性协议主要是为了除了多核cpu内缓存不一致的情况，比如
+![](./static/MESI_00.png)
+C先看到A的变化，后看到B的变化，于是最后i=200；D先看到B的变化，后看到A的变化，于是最后i=100.造成了变量在不同缓存之间的不一致
+MESI协议可以有效解决缓存一致性问题，它有四个状态：
+Modified：已修改
+Exclusive：独占
+Shared：共享
+Invalidated：失效
+下面这个例子用来说明他们之间的变化已经是如何解决一致性问题的
+
+初始有3块CPU,分别为A,B,C
+![](./static/MESI_01.png)
+A先从内存中读取变量X，此时它对变量X的状态为E，在E状态下，可以随意修改数据（修改后状态变为M），因为只有它自己持有数据
+![](./static/MESI_02.png)
+接着B也需要从内存中读取变量X，A会接收到B的信号，会将它的数据返回给B。此时A,B的状态都变为S，并且此时A,B的数据都是和内存一致的(因为是从A的E状态转换来的，此时A的缓存和内存中数据一致)
+![](./static/MESI_03.png)
+当A需要修改数据时，会向**所有其余的CPU**传递信号，将他们的状态变为I（如果C也有共享的话，C的状态也会变为I），只会A会更新数据，同时将它的状态设为M
+需要注意的是，如果之后A还要再次更新数据，那么直接更新即可，不必再向其余的CPU发送消息
+![](./static/MESI_04.png)
+B想要读取数据时，会先通知A，A将其数据写到内存中，同时同步到B中，同时A会通知B（如果有其他的CPU也会通知其他的CPU）将其状态修改为S，其本身状态也会修改为S
+![](./static/MESI_05.png)
+四个状态的转换图如下
+![](./static/MESI_06.png)
+
+完全遵守MESI会影响cpu利用率，因为A**每次修改变量后都需要等到B对该变量已修改为I的ack**才能完成对变量的更新。因此，引入了一个**存储队列Store Buffer**，A在修改变量之后会直接扔到存储队列里，由存储队列接受B的ack，接收到B的ack以后，存储队列里的变量就会写回A的缓冲区。但存储队列的容量很小，如果存储队列满了，那么A又会恢复到等待B的ack。因此，又引入了一个**失效队列InvalidQueue**，A只需要把被修改的变量(也就是对B而言的失效消息)放进**A存储队列，再由A存储队列放到B的失效队列**中，就可以得到B的ack而不用等待。B在空闲的时候就会去消耗它失效队列里面的消息。
+![](./static/MESI_07.png)
+常说的指令重排和cpu乱序执行**有时候**(还有编译器优化的原因)就是因为这两个队列的原因，比如说，有两条语句，先修改D，再修改C。但是D先收到ack，C后收到ack，这样看起来就像是C和D执行顺序颠倒了一样
+![](./static/MESI_08.png)
+![](./static/MESI_09.png)
+**那么，什么是内存屏障？**
+内存屏障也跟上面提到的两个队列有关系，内存屏障分为**读屏障和写屏障**，
+其中，在写操作之后加入写屏障，可以保证存储队列里的消息全部被写入到对方cpu的失效队列中，读操作之前加入读屏障，可以保证失效队列中的消息都被消费完

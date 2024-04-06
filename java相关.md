@@ -1416,8 +1416,19 @@ NX即为上面的锁，PX 10000设置过期时间为10s，防止线程持有锁�
 
 ## 主从复制
 三种主从沟通方式：
-1.第一次同步，主节点会写一份RDB快照穿给从节点，在写RDB文件，传输RDB文件，子节点加载RDB文件的时候，期间的写命令会被写到replication buffer缓冲区，之后将缓冲区里的文件发给从节点完成第一次同步
+1.初次同步
+从服务器 Slave 向主服务器 Master 发送数据同步命令；
+
+Master 主服务器接收到同步命令后，保存快照生成 RDB 文件，同时使用缓冲区replication buffer记录从现在开始执行的所有写命令；
+
+Master 主服务器将快照文件（RDB文件）发送给 Slave 从服务器，**Slave 从服务器接收到后，清空旧数据，载入新数据**；
+
+Master 主服务器快照发送完后开始向 Slave 从服务器发送缓冲区的写命令，Slave 从服务器接收命令并执行，完成复制初始化；
+
+此后 Master 主服务器每次执行一个写命令都会同步发送给 Slave 从服务器，保持相互之间数据的一致性；
+
 2.命令传播，主节点和从节点会建立TCP长连接，期间的主节点写命令都会复制到从节点
+
 3.增量复制，在网络断开一段时候恢复后，从节点会使用在一个环形缓冲区repl_backlog_buffer的偏移与主节点计算增量，如果数据还在缓冲区里，那么会将其写入replication buffer缓冲区由主节点发送给从节点，如果数据已经被覆盖，那么会进行全量同步
 
 ## 哨兵
@@ -1428,7 +1439,106 @@ NX即为上面的锁，PX 10000设置过期时间为10s，防止线程持有锁�
 3.通知客户端主节点已更换
 4.将旧主节点指向新的主节点
 
+## 如何解决脑裂现象
+脑裂现象是指主节点因为网络波动等原因暂时失联，期间哨兵选出了新的主节点。如果期间客户端仍然在向主节点写入信息，那么等旧主节点恢复后集群中就存在两个主节点，在其与新的主节点进行同步时，客户端写入的消息会丢失(因为主从复制第一次同步从节点会先清空)，这就导致了消息的丢失。
+想要解决就需要设置Redis关于从节点的两个参数
+min-replicas-to-write 1(N)
+min-replicas-max-lag 10(M)
+第一个参数指至少有一个从节点存活时，主节点才能进行写入，否则拒绝写入
+第二个参数指主节点多长时间（秒）无法得到从节点的响应，就认为这个节点失联。我们这里配置的是 10 秒，也就是说主节点10 秒都得不到一个从节点的响应，就会
+认为这个从节点失联，停止接受新的写入命令请求。
+也就是说，主节点只有在至少有N个从节点存活，且和每个从节点通信时间都不少于M时才能接受新的写入请求，否则拒绝新的请求。**这样在发生脑裂时，旧的主节点因为没有足够的从节点，因此会拒绝新的写入**
 # spring
+## springboot实现自动配置的原理
+自动配置指的是通过注解或者简单配置就可以在SpringBoot的帮助下实现某块功能。比如使用Redis的时候，只要用Maven和yml进行相应配置，就可以在需要的地方直接使用相应的模块功能(自动加入IOC容器中)，而不需要手动引入或者进行相应配置
+
+自动配置主要依赖下面的注解
+```
+@SpringbootApplication
+    @SpringBootConfigration
+    @EnableAutoConfiguration
+    @ComponentScan
+```
+@SpringBootConfigration是对@Configration的封装，指明这是一个配置类
+Springboot的配置主要来自于@ComponentScan注解和@EnableAutoConfiguration注解。
+
+@ComponentScan用于对指定的package进行扫描，找到符合条件的类，默认是扫描被@Component修饰的类。如果没有指定package，则默认扫描当前@ComponentScan所修饰的类所在的package。
+
+@EnableAutoConfiguration是实现自动配置的关键
+```
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@AutoConfigurationPackage
+@Import({AutoConfigurationImportSelector.class})
+public @interface EnableAutoConfiguration {
+    String ENABLED_OVERRIDE_PROPERTY = "spring.boot.enableautoconfiguration";
+
+    Class<?>[] exclude() default {};
+
+    String[] excludeName() default {};
+}
+```
+**EnableAutoConfiguration通过注解@import导入了ImportSelector的实现类AutoConfigurationImportSelector**
+@import的作用是提供了一种显示地从其他地方加载配置类的方式，这样可以避免使用性能较差的组件扫描(@ComponentScan)。
+@import支持三种导入方式，1.普通类，2.接口ImportSelector的实现类，3.接口ImportBeanDefinitionRegistrar的实现类。由于EnableAutoConfiguration使用的导入方式是第二种，因此这里给出一个使用第二种方式导入的例子：
+```
+接口ImportSelector有一个selectImports方法，返回值是一个字符串数组，数组中的每个元素分别代表一个将被导入的配置类的全限定名
+//创建一个普通类
+public class ZooConfig{
+    @Bean
+    public Tiger tiger(){
+        return new Tiger();
+    }
+}
+
+public class Tiger{
+
+}
+//创建一个ImportSelector实现类
+public class ZooImportSelector implements ImportSelector{
+    @Override
+    public String[] selectImports(AnnotationMetadata metadata){
+        return new String[]{"cn.memset.ZooConfig}//返回普通类ZooConfig的全限定名
+    }
+}
+//创建一个配置类，将ImportSelector实现类导入
+@Configuration
+@Import({ZooImportSelector.calss})
+public class ConfigB{
+
+}
+//测试
+public static void main(String args[]){
+    ApplicationContext ctx = new AnnotationConfigApplicationContext(ConfigB.class)
+    //现在Bean ZooConfig和Tiger都在IOC容器中，并且可用
+    ZooConfig zc = ctx.getBean(ZooConfig.class);
+    Tiger t = ctx.getBean(Tiger.class);
+    System.out.println(zc.getClass().getSimpleName());
+    System.out.println(t.getClass().getSimpleName());
+输出：
+zooConfig(类名)
+tiger(类名)
+}
+```
+而AutoConfigurationImportSelector中selectImports部分的源码为
+![](./static/autoConfig_importSelector.png)
+其中方法getAutoConfigurationEntry为自动配置的入口方法，其源码为
+![](./static/autoConfig_AtuoConfigurationEntry.png)
+其中第2步中的getCandidateConfigurations方法为SpringFactories机制，从配置文件spring.factorie中找出所有的自动配置类的方法
+![](./static/getCandidate.png)
+其中loadFactoryNames方法会通过Spring Factories(类似于SPI)机制加载配置文件
+META-INF/spring.factories(由第三方jar包提供，配置信息通常以键值对的形式存在，键是接口或注解的全限定名，值是对应的实现类的全限定名。)，再根据@Conditional注解，过滤掉不必要的自动配置类
+
+简要来讲，SpringBoot实现自动配置的链条为：
+@SpringBootApplication -> 
+@EnableAutoConfiguration -> 
+@import(导入selectImports返回的全限定类名字符串数组，得到BeanDifination) ->
+AutoConfigurationImportSelector ->
+selectImports(返回全限定类名字符串数组，通过getCandidateConfigurations取得) ->
+getAutoConfigurationEntry ->
+getCandidateConfigurations(通过SpringFactoriesLoader加载第三方jar包提供的META-INF/spring.factories文件，返回所需配置的全限定类名字符串数组)
 ## MVC模型
 ![alt text](image-8.png)
 ## spring事务
@@ -1761,7 +1871,14 @@ const（结果只有一条的主键或唯一索引扫描）。
 
 ## 索引下推
 对索引的判断在存储引擎完成，而不用在服务层完成
-
+比如有语句：
+```
+select * from tuser where name like '张 %' and age=10 and ismale=1;
+```
+在无索引下推的时候，根据最左前缀原则，存储引擎会先定位到name为张的那些记录，然后每一条记录都会交给服务层，由服务层判断age=10成不成立
+![](./static/index01.png)
+在有索引下推时，会直接在存储引擎进行条件的判断，减少回表的次数
+![](./static/index02.png)
 ## 聚簇索引的特点
 1.唯一性：一个表中只有一个聚簇索引
 2.数据物理顺序：

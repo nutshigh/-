@@ -2086,7 +2086,10 @@ select ... for update;
 ## redolog和binlog是怎么保持数据一致性的
 通过两阶段提交。数据库会开启一个内部事务XA，会先往redolog里写入事务的id XID，之后将redolog刷盘（**prepare阶段，此时redolog的事务状态被设置为prepare**），然后将XID写入binlog，进行binlog的刷盘，完成后，**将redolog的事务状态设置为commit**。
 
-如果发生异常，那么会先顺序扫描redolog文件，当发现处于prepare阶段的redolog时，会去扫描binlog，如果在binlog里发现了XID，那么说明redolog和binlog都已经完成刷盘，可以提交事务；如果没有发现XID，那么说明redolog刷盘了但是binlog没有刷盘，此时需要进行回滚
+如果发生异常，那么会先顺序扫描redolog文件，当发现处于prepare阶段的redolog时，会去扫描binlog，如果在binlog里发现了XID，那么说明redolog和binlog都已经完成刷盘，可以提交事务(因为是在磁盘里扫描的binlog，binlog在刷盘前会写入XID，如果在磁盘里发现了XID，说明binlog已经刷盘成功了)；如果没有发现XID，那么说明redolog刷盘了但是binlog没有刷盘，此时需要进行回滚
+
+redolog是磁盘里的一个环形缓冲区，是可覆盖的写
+binlog空间不够会开新页
 
 ## 各种刷盘时机比较
 ### redolog

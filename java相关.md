@@ -1663,6 +1663,7 @@ getCandidateConfigurations(通过SpringFactoriesLoader加载第三方jar包提�
 ## MVC模型
 ![alt text](image-8.png)
 ## spring事务
+### 事务传播
 ![alt text](image-11.png)
 ```
 @RestController
@@ -1705,6 +1706,9 @@ REQURES_NEW和NESTED都会开启新事务，在当前事务失败后不会影响
 比如UserService开启的事务是REQUIRED_NEW，那么UserService会**开启自己的新事务，并将当前事务挂起**，在完成后就会提交，在外部Controller的事务发生异常时Controller的事务回滚，但是UserService的事务已经提交了，不能回滚，这就会造成脏数据的产生
 LogService开启的事务是NESTED，那么LogService也会**开启一个新事务，但是这个事务是和外部事务嵌套的**，在LogService事务完成后，它并不会马上提交，而是会和外部Controller的事务一起提交，不会造成脏数据的产生
 REQUIRED_NEW的应用场景是需要进行某些独立的操作，而NESTED的应用场景是需要进行某些子操作
+
+### 事务失效
+
 ## Spring是如何解决的循环依赖
 Spring通过三级缓存解决了循环依赖，其中一级缓存为单例池（singletonObjects）,二级缓存为早期曝光对象earlySingletonObjects，三级缓存为早期曝光对象工厂（singletonFactories）。当A、B两个类发生循环引用时，在A完成实例化后，就使用实例化后的对象去创建一个对象工厂，并添加到三级缓存中，如果A被AOP代理，那么通过这个工厂获取到的就是A代理后的对象，如果A没有被AOP代理，那么这个工厂获取到的就是A实例化的对象。当A进行属性注入时，会去创建B，同时B又依赖了A，所以创建B的同时又会去调用getBean(a)来获取需要的依赖，此时的getBean(a)会从缓存中获取，第一步，先获取到三级缓存中的工厂；第二步，调用对象工工厂的getObject方法来获取到对应的对象，得到这个对象后将其注入到B中。紧接着B会走完它的生命周期流程，包括初始化、后置处理器等。当B创建完后，会将B再注入到A中，此时A再完成它的整个生命周期。至此，循环依赖结束
 解决循环依赖的核心代码：
@@ -1880,16 +1884,54 @@ todo
 ## mq消息丢失问题
 mq消息丢失可能存在三种可能，生产者端丢失，mq丢失，消费者取到了消息但还没处理造成的丢失
 针对生产者端：1.开始rabbitMQ的事务机制，在发送数据之前开启事务，如果消息没被mq接收到生产者端会报错，此时可以回滚事务然后重发消息，如果收到了消息就可以提交事务
-2.使用confirm机制，confirm机制和事务最大的不同就是它是异步的。开启confirm机制后，每个消息会有一个独特的id，mq收到消息后会返回一个ack，如果没有收到消息会回调nack接口告知发送失败，这时可以尝试重发；同时，因为每个消息都有唯一的id，因此在一段时间后没有收到ack，生产者端可以自己重发消息
+2.使用confirm机制，confirm机制和事务最大的不同就是它是异步的。开启confirm机制后，每个消息会有一个独特的id，mq收到消息后会返回一个ack，如果没有收到消息会回调nack接口告知发送失败，这时可以尝试重发；同时，因为每个消息都有唯一的id，因此在一段时间后没有收到ack，生产者端可以自己重发消息（所谓的补偿机制）
+```
+/**
+ * @description : 消息生产者
+ */
+@Component
+@Slf4j
+public class RabbitmqProducer {
 
-针对mq端：对mq的消息持久化到硬盘上
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    public void sendMessage(Map<String, Object> headers, Object message, String messageId, String exchangeName, String key) {
+        // 自定义消息头
+        MessageHeaders messageHeaders = new MessageHeaders(headers);
+        // 创建消息
+        Message<Object> msg = MessageBuilder.createMessage(message, messageHeaders);
+        /* 确认的回调 确认消息是否到达 Broker 服务器 其实就是是否到达交换器
+         * 如果发送时候指定的交换器不存在 ack 就是 false 代表消息不可达
+         */
+        rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
+            log.info("correlationData：{} , ack:{}", correlationData.getId(), ack);
+            if (!ack) {
+                System.out.println("进行对应的消息补偿机制");
+            }
+        });
+        // 在实际中ID 应该是全局唯一 能够唯一标识消息 消息不可达的时候触发ConfirmCallback回调方法时可以获取该值，进行对应的错误处理
+        CorrelationData correlationData = new CorrelationData(messageId);
+        rabbitTemplate.convertAndSend(exchangeName, key, msg, correlationData);
+    }
+}
+```
+
+针对mq端：对mq的消息持久化到硬盘上或集群，集群分为普通集群和镜像集群，普通集群是有多个rabbitmq实例，但只会有一个队列queue，每个实例都有queue的元信息(queue的一些配置，通过queue的元信息可以找到queue所在实例)。queue只会保存在一个rabbitmq实例A上，如果在消费时连接到了另一个raabitmq实例B，B会从A处将queue的信息拉取过来。
+
+镜像集群下每一个rabbitmq实例都会有完整的queue的消息，到写消息到queue上时，可以同步消息到其他所有queue或者指定数量的queue。这样的好处是任意一个rabbitmq实例宕机也不影响，坏处是开销太大
 
 针对消费者端：使用raabitmq的ack机制，先关掉mq的自动ack，在消息处理完之后在代码里手动ack。这里的ack是由消费者发送到mq的，与生产这段的ack不同。
 ## mq重复消费问题
-mq不处理重复消费问题，通常是在业务代码里自行处理。要求实现幂等性，seckill里是通过用户id+商品id的唯一索引实现
+mq不处理重复消费问题，通常是在业务代码消费者端里自行处理。要求实现幂等性，seckill里是通过用户id+商品id的唯一索引实现
 
 还有一种方案是加一个消息处理表
 
+## mq如何保证顺序消息
+对于 RabbitMQ 来说，导致上面顺序错乱的原因通常是消费者是集群部署，不同的消费者消费到了同一订单的不同的消息，如消费者 A 执行了增加，消费者 B 执行了修改，消费者 C 执行了删除，但是消费者 C 执行比消费者 B 快，消费者 B 又比消费者 A 快，就会导致消费 binlog 执行到数据库的时候顺序错乱，本该顺序是增加、修改、删除，变成了删除、修改、增加。
+![](./static/mq01.png)
+解决这种问题的方案是，将queue分成多个，每个消费者固定消费一个queue里面的消息，生产者在发送消息的时候将同一个订单号的消息发送到同一个queue中。这样因为一个queue里面的消息是有序的，而一个queue又只会被一个消费者顺序消费，进而保证了消息的顺序性。
+![](./static/mq02.png)
 # 网络
 ## 浏览器敲下URL发生了什么？
 DNS 解析：当用户输入一个网址并按下回车键的时候，浏览器获得一个域名，而在实际通信过程中，我们需要的是一个 IP 地址，因此我们需要先把域名转换成相应 IP 地址。

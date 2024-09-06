@@ -917,6 +917,76 @@ jdk1.6以后，synchronized有四种状态：
 
 4.重量级锁，当资源已经被线程占有，此时为偏向锁或者轻量级锁状态，此时再有其他进程来竞争，那么会升级为重量级锁，**重量级锁由操作系统实现，开销比较高**
 
+#### synchronized 进阶
+
+java中的多线程锁都是基于对象的，类锁也是对象锁，锁的是Class对象。
+
+```java
+// 在代码块中使用时，锁为括号里面的对象
+// 因此下面两种方法是等价的
+
+// 关键字在实例方法上，锁为当前实例
+public synchronized void instanceLock() {
+    // code
+}
+
+// 关键字在代码块上，锁为括号里面的对象
+public void blockLock() {
+    synchronized (this) {
+        // code
+    }
+}
+
+// 下面方法也是等价的
+
+// 关键字在静态方法上，锁为当前Class对象
+public static synchronized void classLock() {
+    // code
+}
+
+// 关键字在代码块上，锁为括号里面的对象
+public void blockLock() {
+    synchronized (this.getClass()) {
+        // code
+    }
+}
+
+```
+
+#### 锁的四种状态及锁降级
+
+在 JDK 1.6 以前，所有的锁都是”重量级“锁，因为使用的是**操作系统的互斥锁**，当一个线程持有锁时，其他试图进入synchronized块的线程将被阻塞，直到锁被释放。涉及到了**线程上下文切换**和**用户态与内核态的切换**，因此效率较低。
+
+在 JDK 1.6 及其以后，一个**对象**其实有四种锁状态（因为锁住的就是对象），它们级别由低到高依次是：无锁状态，偏向锁状态，轻量级锁状态，重量级锁状态
+
+几种锁会随着竞争情况逐渐升级，锁的升级很容易发生，但是锁降级发生的条件就比较苛刻了，**锁降级发生在 Stop The World（Java 垃圾回收中的一个重要概念）期间**，当 JVM 进入安全点的时候，会检查是否有闲置的锁，然后进行降级。
+
+#### 对象的锁放在什么地方
+
+在对象头的`Mark Word`字段存储对象的hashCode或锁信息等
+
+对象头的内容：
+|长度	|内容	|说明|
+|:-:|:-:|:-:
+|32/64bit	|Mark Word	|存储对象的 hashCode 或锁信息等
+|32/64bit	|Class Metadata Address	|存储到对象类型数据的指针
+|32/64bit	|Array length	|数组的长度（如果是数组）
+
+`Mark Word`的格式
+
+|锁状态|	29 bit 或 61 bit	|1 bit 是否是偏向锁？	|2bit 锁标志位
+|:-:|:-:|:-:|:-:|
+|无锁|	|	0|	01|
+|偏向锁|	线程 ID|	1|	01|
+|轻量级锁|	指向栈中锁记录的指针|	此时这一位不用于标识偏向锁|	00|
+|重量级锁|	指向互斥量（重量级锁）的指针|	此时这一位不用于标识偏向锁|	10|
+|GC 标记|		|此时这一位不用于标识偏向锁|	11|
+
+TODO: 待整理完善
+放两个文章链接
+[synchronized四种状态](https://javabetter.cn/thread/synchronized.html#%E5%B0%8F%E7%BB%93)
+[美团关于锁的一些介绍](https://tech.meituan.com/2018/11/15/java-lock.html)
+
 ### ReentrantLock
 ReentrantLock：与synchronized类似，也是一个可重入且独占的锁，只不过它实现公平锁（先来的进程先获得锁），而synchronized只有非公平锁；它可以实现中断等待锁，使得等待锁的进程可以放弃等待去做其他事情，这个是通过lock.lockInterruptibly来实现；它可以用Condition接口和newCondition()方法来实现选择性通知
 ReentrantLock实现可重入的原理与AQS有关（ReentrantLock本来就是基于AQS的同步器），

@@ -997,10 +997,48 @@ public void set(T value) {
 ThreadLocalMap getMap(Thread t) {
     return t.threadLocals;
 }
+
+private void set(ThreadLocal<?> key, Object value) {
+
+    // We don't use a fast path as with get() because it is at
+    // least as common to use set() to create new entries as
+    // it is to replace existing ones, in which case, a fast
+    // path would fail more often than not.
+
+    Entry[] tab = table;
+    int len = tab.length;
+    //使用当前threadLocal的哈希值作为下标
+    int i = key.threadLocalHashCode & (len-1);
+
+    for (Entry e = tab[i];
+            e != null;
+            e = tab[i = nextIndex(i, len)]) {
+        if (e.refersTo(key)) {
+            e.value = value;
+            return;
+        }
+
+        if (e.refersTo(null)) {
+            replaceStaleEntry(key, value, i);
+            return;
+        }
+    }
+
+    tab[i] = new Entry(key, value);
+    int sz = ++size;
+    if (!cleanSomeSlots(i, sz) && sz >= threshold)
+        rehash();
+}
 ```
 可以看到，set方法其实是获取了当前线程的ThreadLocalMap，之后把ThreadLocal对象当作键，其值为map值存入ThreadLocalMap
 
-ThradLocalMap的key为ThreadLocal的弱引用，而值为强引用，因此当ThreadLocal没有被外部强引用的情况下，在被垃圾回收时会导致键为空，值不为空，永远无法回收值的内存空间，造成的内存泄露。ThreadLocalMap在调用get，set，remove时，会清理key为null的记录，但最好每次使用完ThreadLocal后都手动remove。
+ThreadLocal实现线程变量的原理是维护了一个ThreadLocalMap的静态类，他有一个成员变量Entry数组，每个Entry是一个键值对，对应每个线程的线程变量，键为ThreadLocal的弱引用，值为需要存储的值，因为键为ThreadLocal的弱引用，所以当外部没有强引用指向它时，该弱引用会被回收，但是此时value还被Entry引用，因此无法回收，造成了内存泄漏。ThreadLocalMap在调用get，set，remove时，会清理key为null的记录，但最好每次使用完ThreadLocal后都手动remove。
+
+每个线程都有自己的ThreadLocalMap，定义如下：
+```
+ThreadLocal.ThreadLocalMap threadLocals;
+```
+一个ThreadLocal只能存储一个值，在对同一个线程设置不同的ThreadLocal时，其实是在ThreadLocalMap的成员变量Entry数组里新加了一个Entry，key为新加的ThreadLocal，值为新加的value
 ### 线程池
 线程池：就是管理一系列线程的资源池，当需要使用线程时从池子里取，使用完之后返还，提高了线程的利用率，降低了重复创建和销毁线程带来的开销
 
@@ -1322,7 +1360,10 @@ YGC为minorGC的耗时，YGCT为minorGC的时间间隔，如果时间间隔太�
 ### 一些可能导致内存泄漏的情况
 1、使用静态变量，static修饰的变量不会被gc回收，当类/对象使用完毕后相应占用空间仍然得不到释放，静态变量多了以后就会撑爆内存；
 2、创建连接（比如数据库连接）或者打开一个流后未及时关闭，gc只能回收内存，而连接和流往往还涉及其他的IO设备，因此gc无法自动回收，当未关闭的连接越来越多，最终会导致内存泄漏，所以连接和流最好在finally块中进行回收；
-3、threadlocal，thread实现线程变量的原理是维护了一个ThreadLocalMap，每个entry是一个hash键值对，键为ThreadLocal的弱引用，值为需要存储的值，当ThreadLocal这个key被回收，就会出现key为null的entry，无法找到其value，在线程终止前这部分内存无法回收。解决方法是在finally块中使用ThreadLocal提供的remove方法
+3、threadlocal，thread实现线程变量的原理是维护了一个ThreadLocalMap的静态类，他有一个成员变量Entry数组，每个Entry是一个键值对，键为ThreadLocal的弱引用，值为需要存储的值，因为键为ThreadLocal的弱引用，所以当外部没有强引用指向它时，该弱引用会被回收，但是此时value还被Entry引用，因此无法回收，造成了内存泄漏
+
+为什么threadlocal要用弱引用呢？因为可以保证线程不再使用threadlocal时就可以回收掉，避免内存泄漏的发生
+
 ```
 TheadLocal用法示例
 import java.lang.ThreadLocal;
@@ -1947,11 +1988,73 @@ public class Classes implements BoyInjection {
 ## bean的生命周期
 ![alt text](image-9.png)
 ![alt text](image-10.png)
-populate中的对象属性为bean对象持有的其他自定义bean，如User，Service等
+
+一、通过反射对bean进行加载
+
+二、生产bean
+1、bean实例化
+
+2、属性填充
+populate中的对象属性为bean对象持有的其他自定义bean，如User，Service等，通常就是@Autowired注解的对象，进行填充时需要到三级缓存里获取对应的属性对象
+
+3、初始化
+3.1 初始化容器
 Aware相关接口用于获取相关资源，如果第2步中bean属性实现了相关的Aware接口，那么就会调用相关Aware接口执行set方法，比如**实现了BeanFactoryAware方法，那么就会执行setBeanFactory**
-bean前置处理和bean后置处理为**执行初始化前后的自定义操作**
-InitailizingBean为初始化方法，有@PostConstruct,InitializingBean.afterPropertiesSet(),和init-method().其中，**PostConstruct会在构造函数之后，init函数之前执行（如果有）**，**afterPropertiesSet()会在PostConstruct之后，init-method之前执行**
+
+3.2 执行初始化方法
+通过invokeInitMethods方法执行Bean的初始化方法，这个初始化方法是通过实现InitializingBean接口而实现的afterPropertiesSet方法
+
+在执行完afterPropertiesSet方法后，还会继续执行在Bean上自定义的initMethod方法，比如
+```
+public class TestService{
+    public void initMethod() throws Exception {
+        System.out.println("afterPropertiesSet之后执行")
+    }
+}
+
+@Service
+public class TestOtherService {
+
+    @Bean(initMethod = "initMethod")
+    public TestService testService() {
+        return new TestService();
+    }
+}
+```
 **init-method用来在bean初始化的时候执行指定方法，比如数据库连接之类的**
+3.3 执行初始化方法前后
+通过
+applyBeanPostProcessors**Before**Initialization
+applyBeanPostProcessors**After**Initialization
+两个方法在初始化前后执行各种Bean的后置处理器，包括负责“构造后@PostConstruct”的InitDestoryAnnotationBeanPostProcessor等系统级处理器；或者通过实现BeanPostProcessor接口的自定义处理器，比如
+```
+@Service
+public class TestService implements BeanPostProcessor {
+    @override
+    public Object postProcessorsBeforeInitialization(Object bean,String beanName) throws BeansException {
+        System.out.println("afterPropertiesSet之前执行");
+        return "";
+    }
+
+    @override
+    public Object postProcessorsAfterInitialization(Object bean,String beanName) throws BeansException {
+        System.out.println("afterPropertiesSet之后执行");
+        return "";
+    }
+}
+```
+4、注册销毁
+通过registerDisposableBean方法，将实现了销毁接口DisposableBean的Bean进行注册，这样在销毁时就可以调用destroy方法进行销毁
+
+5、通过1,2,3,4步，bean就创建完成了，之后将这些完整的bean方法调用addSingleton方法将bean加入三级缓存的单例池中，产生bean就完成了
+
+三、销毁
+首先会执行PostProcessBeforeDestruction处理器，用来执行bean中被@preDestory注解的方法
+
+然后通过destroyBean方法销毁对象，销毁时会执行前面提到的destroy方法
+
+之后会通过invokeCustomDestoryMethod方法，来执行在bean上自定义的destroyMethod方法
+
 在销毁阶段，如果bean是单例模式，那么会先调用**DisposableBean.destory()**，然后调用**destory-method**
 ```
 public class InitMethod  {
